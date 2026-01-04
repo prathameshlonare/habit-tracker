@@ -71,6 +71,23 @@ export const AuthProvider = ({ children }) => {
         try {
             await signOut(auth);
             setCurrentUser(null);
+
+            // Clear any localStorage data to prevent data leakage between users
+            // Keep only non-user-specific data
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                // Remove habits, journal, and user-specific settings
+                if (key === 'habits' ||
+                    key === 'journalEntries' ||
+                    key.startsWith('habitTrackerSettings_') ||
+                    key.startsWith('lastAllCompletedNotification') ||
+                    key.startsWith('lastStreakNotification_') ||
+                    key.startsWith('lastDailyReminder')) {
+                    keysToRemove.push(key);
+                }
+            }
+            keysToRemove.forEach(key => localStorage.removeItem(key));
         } catch (error) {
             setError(error.message);
         }

@@ -828,7 +828,7 @@ function HabitsPage({ habits, onToggle, onAdd }) {
 
 
 // --- COMPONENT: SETTINGS PAGE ---
-const Settings = ({ settings, onSettingsChange }) => {
+const Settings = ({ settings, onSettingsChange, habits }) => {
   const { currentUser } = useAuth();
   const [saveStatus, setSaveStatus] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(0);
@@ -863,20 +863,43 @@ const Settings = ({ settings, onSettingsChange }) => {
   };
 
   const handleExport = () => {
-    exportToPDF(setSaveStatus);
+    try {
+      exportToPDF(habits, setSaveStatus);
+    } catch (error) {
+      console.error('Export error:', error);
+      setSaveStatus('Export failed: ' + error.message);
+    }
   };
 
-  const handleDeleteAll = () => {
+  const handleDeleteAll = async () => {
+    // Step 1: First click - show warning
     if (deleteConfirm === 0) {
       setDeleteConfirm(1);
       setTimeout(() => setDeleteConfirm(0), 5000);
       return;
     }
 
+    // Step 2: Second click - ask for final confirmation
     if (deleteConfirm === 1) {
-      // Clear data logic would go here, probably calling a firestoreService function
-      setSaveStatus('Please contact support to delete all cloud data.');
-      setDeleteConfirm(0);
+      setDeleteConfirm(2);
+      setTimeout(() => setDeleteConfirm(0), 5000);
+      return;
+    }
+
+    // Step 3: Third click - actually delete all data
+    if (deleteConfirm === 2) {
+      try {
+        setSaveStatus('Deleting all data...');
+        await firestoreService.deleteAllUserDataFromFirestore(currentUser.uid);
+        setSaveStatus('All data deleted successfully! ✓');
+        setDeleteConfirm(0);
+        setTimeout(() => setSaveStatus(''), 3000);
+      } catch (error) {
+        console.error('Error deleting data:', error);
+        setSaveStatus('Failed to delete data. Please try again.');
+        setDeleteConfirm(0);
+        setTimeout(() => setSaveStatus(''), 3000);
+      }
     }
   };
 
@@ -975,12 +998,41 @@ const Settings = ({ settings, onSettingsChange }) => {
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
           Data Management
         </h3>
+
+        {/* Export Data */}
         <div className="data-box">
           <div className="data-info">
             <h4>Export as PDF</h4>
             <p>Generate a report with all your habits and journal entries</p>
           </div>
           <button className="btn-secondary" onClick={handleExport}>Export PDF</button>
+        </div>
+
+        {/* Clear All Data */}
+        <div className="data-box" style={{ marginTop: '1rem', borderColor: deleteConfirm > 0 ? '#fca5a5' : '#e5e7eb' }}>
+          <div className="data-info">
+            <h4 style={{ color: deleteConfirm > 0 ? '#dc2626' : 'inherit' }}>
+              ⚠️ Clear All Data
+            </h4>
+            <p style={{ color: deleteConfirm > 0 ? '#dc2626' : '#64748b' }}>
+              {deleteConfirm === 0 && 'Permanently delete all your habits and journal entries'}
+              {deleteConfirm === 1 && 'Are you sure? This action cannot be undone!'}
+              {deleteConfirm === 2 && 'Click one more time to confirm deletion'}
+            </p>
+          </div>
+          <button
+            className={deleteConfirm > 0 ? "btn-danger" : "btn-secondary"}
+            onClick={handleDeleteAll}
+            style={{
+              backgroundColor: deleteConfirm > 0 ? '#dc2626' : undefined,
+              color: deleteConfirm > 0 ? 'white' : undefined,
+              borderColor: deleteConfirm > 0 ? '#dc2626' : undefined
+            }}
+          >
+            {deleteConfirm === 0 && 'Clear All Data'}
+            {deleteConfirm === 1 && 'Click Again to Confirm'}
+            {deleteConfirm === 2 && 'Final Confirmation'}
+          </button>
         </div>
       </section>
 
@@ -1535,7 +1587,9 @@ function App() {
   const [habits, setHabits] = useState([]);
   const [journalEntries, setJournalEntries] = useState({});
   const [settings, setSettings] = useState(() => {
-    const saved = localStorage.getItem('habitTrackerSettings');
+    // Settings are now user-scoped to prevent data leakage between users
+    const settingsKey = currentUser ? `habitTrackerSettings_${currentUser.uid}` : 'habitTrackerSettings_temp';
+    const saved = localStorage.getItem(settingsKey);
     return saved ? JSON.parse(saved) : {
       dailyReminders: true,
       weeklyReport: true,
@@ -1562,11 +1616,13 @@ function App() {
 
     // Subscribe to Habits
     const unsubscribeHabits = firestoreService.subscribeToHabits(currentUser.uid, (data) => {
-      // If no data in Firestore, try to migrate from localStorage
+      // One-time migration from localStorage (only if user has no data in Firestore)
       if (data.length === 0) {
         const localHabits = JSON.parse(localStorage.getItem('habits') || '[]');
         if (localHabits.length > 0) {
           firestoreService.migrateHabitsToFirestore(currentUser.uid, localHabits);
+          // Clear localStorage after migration to prevent data leakage
+          localStorage.removeItem('habits');
         }
       }
       setHabits(data);
@@ -1574,11 +1630,13 @@ function App() {
 
     // Subscribe to Journal
     const unsubscribeJournal = firestoreService.subscribeToJournal(currentUser.uid, (data) => {
-      // If no data in Firestore, try to migrate from localStorage
+      // One-time migration from localStorage (only if user has no data in Firestore)
       if (Object.keys(data).length === 0) {
         const localJournal = JSON.parse(localStorage.getItem('journalEntries') || '{}');
         if (Object.keys(localJournal).length > 0) {
           firestoreService.migrateJournalToFirestore(currentUser.uid, localJournal);
+          // Clear localStorage after migration to prevent data leakage
+          localStorage.removeItem('journalEntries');
         }
       }
       setJournalEntries(data);
@@ -1618,19 +1676,21 @@ function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Persistence Effects
+  // Persistence Effect for Settings (user-scoped)
   useEffect(() => {
-    localStorage.setItem("habits", JSON.stringify(habits));
-  }, [habits]);
+    if (!currentUser) return;
+    const settingsKey = `habitTrackerSettings_${currentUser.uid}`;
+    localStorage.setItem(settingsKey, JSON.stringify(settings));
+  }, [settings, currentUser]);
 
+  // Clear user-specific data on logout
   useEffect(() => {
-    localStorage.setItem("journalEntries", JSON.stringify(journalEntries));
-  }, [journalEntries]);
-
-  // Persistence Effect for Settings
-  useEffect(() => {
-    localStorage.setItem('habitTrackerSettings', JSON.stringify(settings));
-  }, [settings]);
+    if (!currentUser) {
+      // User logged out - clear all data to prevent leakage
+      setHabits([]);
+      setJournalEntries({});
+    }
+  }, [currentUser]);
 
   // Notification Effects
   useEffect(() => {
@@ -1851,7 +1911,7 @@ function App() {
                         element={<JournalEntry journalEntries={journalEntries} onSave={saveJournalEntry} />}
                       />
                       <Route path="/analytics" element={<AnalyticsPage habits={habits} />} />
-                      <Route path="/settings" element={<Settings settings={settings} onSettingsChange={setSettings} />} />
+                      <Route path="/settings" element={<Settings settings={settings} onSettingsChange={setSettings} habits={habits} />} />
                       <Route path="*" element={<Navigate to="/" replace />} />
                     </Routes>
                   </div>
@@ -1866,21 +1926,6 @@ function App() {
       {isAccountModalOpen && (
         <div className="modal-overlay" onClick={() => setIsAccountModalOpen(false)}>
           <div className="account-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="account-modal-sidebar">
-              <div className="account-modal-sidebar-header">
-                <h2>Account</h2>
-                <p>Manage your account info.</p>
-              </div>
-              <div className="account-modal-nav">
-                <button className="account-modal-nav-item active">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                    <circle cx="12" cy="7" r="4"></circle>
-                  </svg>
-                  Profile
-                </button>
-              </div>
-            </div>
 
             <div className="account-modal-content">
               <button className="account-modal-close" onClick={() => setIsAccountModalOpen(false)}>

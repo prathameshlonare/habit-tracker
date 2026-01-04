@@ -122,3 +122,36 @@ export const saveJournalEntryInFirestore = async (userId, date, entry) => {
         updatedAt: new Date()
     }, { merge: true });
 };
+
+/**
+ * Deletes all habits for a user
+ */
+export const deleteAllHabitsFromFirestore = async (userId) => {
+    const habitsRef = collection(db, 'users', userId, 'habits');
+    const snapshot = await getDocs(habitsRef);
+
+    const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+    await Promise.all(deletePromises);
+};
+
+/**
+ * Deletes all journal entries for a user
+ */
+export const deleteAllJournalEntriesFromFirestore = async (userId) => {
+    const journalRef = collection(db, 'users', userId, 'journal');
+    const snapshot = await getDocs(journalRef);
+
+    const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+    await Promise.all(deletePromises);
+};
+
+/**
+ * Deletes ALL user data (habits and journal entries)
+ */
+export const deleteAllUserDataFromFirestore = async (userId) => {
+    await Promise.all([
+        deleteAllHabitsFromFirestore(userId),
+        deleteAllJournalEntriesFromFirestore(userId)
+    ]);
+};
+
