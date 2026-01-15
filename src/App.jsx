@@ -1672,7 +1672,15 @@ function App() {
       
       // Cache data locally for offline access
       firestoreService.cacheHabitsLocally(currentUser.uid, data);
-      setHabits(data);
+      
+      // BUT: Don't overwrite UI if user has made offline changes
+      const cachedHabits = firestoreService.getCachedHabits(currentUser.uid);
+      if (cachedHabits.length > 0) {
+        // Merge Firebase data with local cache (local takes priority)
+        setHabits(cachedHabits);
+      } else {
+        setHabits(data);
+      }
     });
 
     // Subscribe to Journal
@@ -1730,6 +1738,25 @@ function App() {
       loadFromCache();
     }
   }, [currentUser, habits.length, Object.keys(journalEntries).length]);
+
+  // Auto-sync when coming online
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    const handleOnline = async () => {
+      console.log('🌐 Back online - checking for queued actions');
+      // Give a small delay to ensure Firebase is ready
+      setTimeout(() => {
+        const { syncNow } = require('./contexts/OfflineContext');
+        if (syncNow && offlineService.getQueueLength() > 0) {
+          syncNow();
+        }
+      }, 1000);
+    };
+    
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [currentUser]);
 
   // Toast callback setup
   useEffect(() => {
@@ -1825,15 +1852,16 @@ function App() {
       newLogs[dateKey] = true; // Add the key when checking
     }
 
-    // Use offline-enabled function
+    // Use offline-enabled function (this handles both online/offline)
     await firestoreService.toggleHabitOffline(currentUser.uid, habitId, dateKey, completed);
 
     // Update local state immediately for UI responsiveness
-    setHabits(habits.map(h => h.id === habitId ? { ...h, logs: newLogs } : h));
+    const updatedHabits = habits.map(h => h.id === habitId ? { ...h, logs: newLogs } : h);
+    setHabits(updatedHabits);
 
     // Achievement checks (only when checking, not unchecking)
     if (newLogs[dateKey]) {
-      checkAndNotifyAchievements(habits.map(h => h.id === habitId ? { ...h, logs: newLogs } : h), settings);
+      checkAndNotifyAchievements(updatedHabits, settings);
     }
   };
 

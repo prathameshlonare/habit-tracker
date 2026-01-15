@@ -17,6 +17,20 @@ class SyncService {
 
     if (offlineService.isOnline) {
       try {
+        // First update local cache to prevent loss
+        const localHabits = JSON.parse(localStorage.getItem(`habits_${userId}`) || '[]');
+        const habitIndex = localHabits.findIndex(h => h.id === habitId);
+        
+        if (habitIndex !== -1) {
+          if (completed) {
+            localHabits[habitIndex].logs[dateKey] = true;
+          } else {
+            delete localHabits[habitIndex].logs[dateKey];
+          }
+          localStorage.setItem(`habits_${userId}`, JSON.stringify(localHabits));
+        }
+        
+        // Then sync to Firebase
         await firestoreService.updateHabitLogsInFirestore(userId, habitId, {
           [dateKey]: completed
         });
@@ -26,6 +40,7 @@ class SyncService {
         offlineService.addToQueue(action);
       }
     } else {
+      // Queue for when online
       offlineService.addToQueue(action);
     }
   }
