@@ -1657,7 +1657,6 @@ function App() {
 
     // Subscribe to Habits
     const unsubscribeHabits = firestoreService.subscribeToHabits(currentUser.uid, (data) => {
-      console.log('📥 Received habits from Firebase:', data.length);
       
       // One-time migration from localStorage (only if user has no data in Firestore)
       if (data.length === 0) {
