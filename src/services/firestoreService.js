@@ -169,8 +169,10 @@ export const toggleHabitOffline = async (userId, habitId, dateKey, completed) =>
     if (habitIndex !== -1) {
         if (completed) {
             localHabits[habitIndex].logs[dateKey] = true;
+            console.log(`✅ Ticked habit ${habitId} for ${dateKey}`);
         } else {
             delete localHabits[habitIndex].logs[dateKey];
+            console.log(`❌ Unticked habit ${habitId} for ${dateKey}`);
         }
         localStorage.setItem(`habits_${userId}`, JSON.stringify(localHabits));
     }
@@ -254,7 +256,12 @@ export const saveJournalEntryOffline = async (userId, date, entry) => {
  * Cache habits locally for offline access
  */
 export const cacheHabitsLocally = (userId, habits) => {
-    localStorage.setItem(`habits_${userId}`, JSON.stringify(habits));
+    try {
+        localStorage.setItem(`habits_${userId}`, JSON.stringify(habits));
+        console.log(`💾 Cached ${habits.length} habits for user ${userId}`);
+    } catch (error) {
+        console.error('❌ Failed to cache habits:', error);
+    }
 };
 
 /**
@@ -268,8 +275,15 @@ export const cacheJournalLocally = (userId, entries) => {
  * Get cached habits for offline access
  */
 export const getCachedHabits = (userId) => {
-    const cached = localStorage.getItem(`habits_${userId}`);
-    return cached ? JSON.parse(cached) : [];
+    try {
+        const cached = localStorage.getItem(`habits_${userId}`);
+        const habits = cached ? JSON.parse(cached) : [];
+        console.log(`📦 Loaded ${habits.length} cached habits for user ${userId}`);
+        return habits;
+    } catch (error) {
+        console.error('❌ Failed to load cached habits:', error);
+        return [];
+    }
 };
 
 /**

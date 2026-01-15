@@ -10,6 +10,7 @@ import { OfflineProvider, useOffline } from './contexts/OfflineContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './components/Login';
 import OfflineIndicator from './components/OfflineIndicator';
+import DebugInfo from './components/DebugInfo';
 import * as firestoreService from './services/firestoreService';
 import {
   Chart as ChartJS,
@@ -1657,6 +1658,8 @@ function App() {
 
     // Subscribe to Habits
     const unsubscribeHabits = firestoreService.subscribeToHabits(currentUser.uid, (data) => {
+      console.log('📥 Received habits from Firebase:', data.length);
+      
       // One-time migration from localStorage (only if user has no data in Firestore)
       if (data.length === 0) {
         const localHabits = JSON.parse(localStorage.getItem('habits') || '[]');
@@ -1695,23 +1698,36 @@ function App() {
     };
   }, [currentUser]);
 
-  // Offline data fallback
+  // Offline data fallback - more aggressive loading
   useEffect(() => {
     if (!currentUser) return;
     
-    // If no internet or data not loaded yet, try to load from cache
-    if (habits.length === 0) {
+    // Always try to load from cache if offline or no data
+    const loadFromCache = () => {
       const cachedHabits = firestoreService.getCachedHabits(currentUser.uid);
+      const cachedJournal = firestoreService.getCachedJournal(currentUser.uid);
+      
+      console.log('📦 Loading from cache:', {
+        cachedHabits: cachedHabits.length,
+        cachedJournal: Object.keys(cachedJournal).length
+      });
+      
       if (cachedHabits.length > 0) {
         setHabits(cachedHabits);
       }
-    }
-    
-    if (Object.keys(journalEntries).length === 0) {
-      const cachedJournal = firestoreService.getCachedJournal(currentUser.uid);
+      
       if (Object.keys(cachedJournal).length > 0) {
         setJournalEntries(cachedJournal);
       }
+    };
+    
+    // Load from cache immediately if offline
+    if (!navigator.onLine) {
+      loadFromCache();
+    }
+    // Also load if no data is currently loaded
+    else if (habits.length === 0 || Object.keys(journalEntries).length === 0) {
+      loadFromCache();
     }
   }, [currentUser, habits.length, Object.keys(journalEntries).length]);
 
@@ -1885,6 +1901,7 @@ function App() {
     <>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       <OfflineIndicator />
+      {process.env.NODE_ENV === 'development' && <DebugInfo userId={currentUser?.uid} habits={habits} journalEntries={journalEntries} />}
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route
