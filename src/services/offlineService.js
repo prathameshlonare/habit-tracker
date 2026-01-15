@@ -28,19 +28,25 @@ class OfflineService {
   async processQueue() {
     if (!this.isOnline || this.queue.length === 0) return;
     
+    console.log(`🔄 Processing ${this.queue.length} queued actions...`);
     const actions = [...this.queue];
     this.queue = [];
     
     for (const action of actions) {
       try {
         await this.executeAction(action);
+        console.log(`✅ Synced action: ${action.type} for habit ${action.habitId}`);
       } catch (error) {
-        console.error('Sync failed:', error);
+        console.error('❌ Sync failed:', error);
         this.queue.unshift(action); // Put back at front
         break;
       }
     }
     this.saveQueue();
+    
+    if (this.queue.length === 0) {
+      console.log('🎉 All queued actions synced successfully');
+    }
   }
 
   async executeAction(action) {
