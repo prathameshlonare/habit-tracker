@@ -10,7 +10,6 @@ import { OfflineProvider, useOffline } from './contexts/OfflineContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './components/Login';
 import OfflineIndicator from './components/OfflineIndicator';
-import DebugInfo from './components/DebugInfo';
 import * as firestoreService from './services/firestoreService';
 import {
   Chart as ChartJS,
@@ -1928,7 +1927,6 @@ function App() {
     <>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       <OfflineIndicator />
-      {process.env.NODE_ENV === 'development' && <DebugInfo userId={currentUser?.uid} habits={habits} journalEntries={journalEntries} />}
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route

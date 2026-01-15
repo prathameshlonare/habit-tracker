@@ -260,7 +260,9 @@ export const cacheHabitsLocally = (userId, habits) => {
         // Cache to multiple locations for robustness
         localStorage.setItem(`habits_${userId}`, JSON.stringify(habits));
         localStorage.setItem(`habits_${userId}_backup`, JSON.stringify(habits));
-        console.log(`💾 Cached ${habits.length} habits for user ${userId}`);
+        if (process.env.NODE_ENV === 'development') {
+            console.log(`💾 Cached ${habits.length} habits for user ${userId}`);
+        }
     } catch (error) {
         console.error('❌ Failed to cache habits:', error);
     }
