@@ -109,12 +109,7 @@ const checkAndNotifyAchievements = (habits, settings) => {
     const allCompleted = habits.every(habit => habit.logs[todayKey]);
 
     if (allCompleted) {
-      const lastNotified = localStorage.getItem('lastAllCompletedNotification');
-
-      if (lastNotified !== todayKey) {
-        showToast('🎉 All Habits Completed!', 'Amazing work! You completed all your habits today!', 'achievement');
-        localStorage.setItem('lastAllCompletedNotification', todayKey);
-      }
+      showToast('🎉 All Habits Completed!', 'Amazing work! You completed all your habits today!', 'achievement');
     }
   }
 
@@ -141,14 +136,10 @@ const checkAndNotifyAchievements = (habits, settings) => {
     // Notify on milestone streaks (3, 7, 14, 30 days)
     const milestones = [3, 7, 14, 30];
     if (milestones.includes(currentStreak)) {
-      const lastStreakNotified = localStorage.getItem(`lastStreakNotification_${habit.id}`);
-      if (lastStreakNotified !== `${currentStreak}`) {
-        showNotification(`🔥 ${currentStreak}-Day Streak!`, {
-          body: `Keep up the great work with "${habit.name}"!`,
-          tag: `streak-${habit.id}`
-        });
-        localStorage.setItem(`lastStreakNotification_${habit.id}`, `${currentStreak}`);
-      }
+      showNotification(`🔥 ${currentStreak}-Day Streak!`, {
+        body: `Keep up the great work with "${habit.name}"!`,
+        tag: `streak-${habit.id}`
+      });
     }
   });
 };
@@ -156,21 +147,21 @@ const checkAndNotifyAchievements = (habits, settings) => {
 // --- COMPONENT: ANALYTICS PAGE (Full Features) ---
 function AnalyticsPage({ habits }) {
 
-  // A. Dynamic Date Setup
-  const today = new Date();
-  const currentActualYear = today.getFullYear();
-  const currentActualMonth = today.getMonth() + 1;
+  // // A. Dynamic Date Setup
+  // const today = new Date();
+  // const currentActualYear = today.getFullYear();
+  // const currentActualMonth = today.getMonth() + 1;
 
   // --- 1. METRICS LOGIC (Preserved) ---
   const activeHabits = habits.length;
   const totalCompleted = habits.reduce((sum, habit) => sum + Object.keys(habit.logs).length, 0);
-  
+
   // Calculate current month days for accurate progress
   const today = new Date();
   const currentActualYear = today.getFullYear();
   const currentActualMonth = today.getMonth() + 1;
   const daysInCurrentMonth = new Date(currentActualYear, currentActualMonth, 0).getDate();
-  
+
   const totalPossible = daysInCurrentMonth * activeHabits;
   const avgCompletion = totalPossible === 0 ? 0 : Math.round((totalCompleted / totalPossible) * 100);
 
@@ -268,7 +259,6 @@ function AnalyticsPage({ habits }) {
 
   // --- 3. TOP PERFORMING LOGIC (Preserved) ---
   const currentMonthKey = `${currentActualYear}-${String(currentActualMonth).padStart(2, '0')}`;
-  const daysInCurrentMonth = new Date(currentActualYear, currentActualMonth, 0).getDate();
 
   const rankedHabits = habits.map(habit => {
     let count = 0;
@@ -445,10 +435,15 @@ const OverallProgressCard = ({ habits, viewYear, viewMonth }) => {
         habits.map(habit => {
           // Calculate Progress for this Month
           let doneCount = 0;
-          Object.keys(habit.logs).forEach(date => {
-            if (date.startsWith(currentMonthKey)) doneCount++;
-          });
-          const percent = Math.round((doneCount / totalDays) * 100);
+          // Only count logs that exist AND match the current month
+          if (habit.logs && typeof habit.logs === 'object') {
+            Object.keys(habit.logs).forEach(date => {
+              if (date.startsWith(currentMonthKey) && habit.logs[date]) {
+                doneCount++;
+              }
+            });
+          }
+          const percent = totalDays > 0 ? Math.round((doneCount / totalDays) * 100) : 0;
 
           return (
             <div key={habit.id} className="progress-item">
@@ -1593,18 +1588,13 @@ function App() {
   // State for data
   const [habits, setHabits] = useState([]);
   const [journalEntries, setJournalEntries] = useState({});
-  const [settings, setSettings] = useState(() => {
-    // Settings are now user-scoped to prevent data leakage between users
-    const settingsKey = currentUser ? `habitTrackerSettings_${currentUser.uid}` : 'habitTrackerSettings_temp';
-    const saved = localStorage.getItem(settingsKey);
-    return saved ? JSON.parse(saved) : {
-      dailyReminders: true,
-      weeklyReport: true,
-      achievementNotifications: true,
-      startOfWeek: 'Monday',
-      timezone: 'IST',
-      theme: 'Light'
-    };
+  const [settings, setSettings] = useState({
+    dailyReminders: true,
+    weeklyReport: true,
+    achievementNotifications: true,
+    startOfWeek: 'Monday',
+    timezone: 'IST',
+    theme: 'Light'
   });
 
   // Account popup and modal states
@@ -1623,29 +1613,11 @@ function App() {
 
     // Subscribe to Habits
     const unsubscribeHabits = firestoreService.subscribeToHabits(currentUser.uid, (data) => {
-      // One-time migration from localStorage (only if user has no data in Firestore)
-      if (data.length === 0) {
-        const localHabits = JSON.parse(localStorage.getItem('habits') || '[]');
-        if (localHabits.length > 0) {
-          firestoreService.migrateHabitsToFirestore(currentUser.uid, localHabits);
-          // Clear localStorage after migration to prevent data leakage
-          localStorage.removeItem('habits');
-        }
-      }
       setHabits(data);
     });
 
     // Subscribe to Journal
     const unsubscribeJournal = firestoreService.subscribeToJournal(currentUser.uid, (data) => {
-      // One-time migration from localStorage (only if user has no data in Firestore)
-      if (Object.keys(data).length === 0) {
-        const localJournal = JSON.parse(localStorage.getItem('journalEntries') || '{}');
-        if (Object.keys(localJournal).length > 0) {
-          firestoreService.migrateJournalToFirestore(currentUser.uid, localJournal);
-          // Clear localStorage after migration to prevent data leakage
-          localStorage.removeItem('journalEntries');
-        }
-      }
       setJournalEntries(data);
     });
 
@@ -1712,17 +1684,15 @@ function App() {
         const now = new Date();
         const hour = now.getHours();
         const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-        const lastReminder = localStorage.getItem('lastDailyReminder');
 
-        // Send reminder at 9 AM or 6 PM if not sent today
-        if ((hour === 9 || hour === 18) && lastReminder !== today) {
+        // Send reminder at 9 AM or 6 PM
+        if (hour === 9 || hour === 18) {
           const hasCompletedAny = habits.some(habit => habit.logs[today]);
           if (!hasCompletedAny && habits.length > 0) {
             showNotification('📝 Habit Reminder', {
               body: "Don't forget to track your habits today!",
               tag: 'daily-reminder'
             });
-            localStorage.setItem('lastDailyReminder', today);
           }
         }
       };
@@ -1788,6 +1758,35 @@ function App() {
     setIsAddingEmail(false);
   };
 
+
+  // Show loading spinner while checking authentication
+  if (authLoading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        backgroundColor: '#f8fafc'
+      }}>
+        <div style={{
+          textAlign: 'center'
+        }}>
+          <div className="spinner" style={{
+            width: '50px',
+            height: '50px',
+            border: '4px solid #e2e8f0',
+            borderTop: '4px solid #6366f1',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 1rem'
+          }}></div>
+          <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
@@ -1796,8 +1795,8 @@ function App() {
         <Route
           path="/*"
           element={
-              <ProtectedRoute>
-              <div className="app-container" style={{ 
+            <ProtectedRoute>
+              <div className="app-container" style={{
                 backgroundImage: 'linear-gradient(rgba(255,255,255,0.9), rgba(55,48,163,0.1)), url({373AF773-68D8-4391-9898-B8F016DD099B}.png)',
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
