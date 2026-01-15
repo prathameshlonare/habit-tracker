@@ -257,7 +257,9 @@ export const saveJournalEntryOffline = async (userId, date, entry) => {
  */
 export const cacheHabitsLocally = (userId, habits) => {
     try {
+        // Cache to multiple locations for robustness
         localStorage.setItem(`habits_${userId}`, JSON.stringify(habits));
+        localStorage.setItem(`habits_${userId}_backup`, JSON.stringify(habits));
         console.log(`💾 Cached ${habits.length} habits for user ${userId}`);
     } catch (error) {
         console.error('❌ Failed to cache habits:', error);
@@ -276,9 +278,30 @@ export const cacheJournalLocally = (userId, entries) => {
  */
 export const getCachedHabits = (userId) => {
     try {
-        const cached = localStorage.getItem(`habits_${userId}`);
-        const habits = cached ? JSON.parse(cached) : [];
-        console.log(`📦 Loaded ${habits.length} cached habits for user ${userId}`);
+        // Try multiple cache keys for robustness
+        const cacheKeys = [`habits_${userId}`, `habits_${userId}_backup`];
+        let habits = [];
+        
+        for (const key of cacheKeys) {
+            const cached = localStorage.getItem(key);
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                if (parsed.length > 0) {
+                    habits = parsed;
+                    console.log(`📦 Loaded ${habits.length} cached habits from ${key}`);
+                    break;
+                }
+            }
+        }
+        
+        if (habits.length > 0) {
+            console.log('📊 Cached habit details:', habits.map(h => ({
+                name: h.name,
+                logsCount: Object.keys(h.logs).length,
+                hasTodayLogs: h.logs[new Date().toISOString().split('T')[0]]
+            })));
+        }
+        
         return habits;
     } catch (error) {
         console.error('❌ Failed to load cached habits:', error);

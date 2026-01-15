@@ -1670,13 +1670,12 @@ function App() {
         }
       }
       
-      // Cache data locally for offline access
-      firestoreService.cacheHabitsLocally(currentUser.uid, data);
+      // Cache Firebase data for reference
+      firestoreService.cacheHabitsLocally(currentUser.uid + '_firebase', data);
       
-      // BUT: Don't overwrite UI if user has made offline changes
+      // Always use cached data (user's actual state)
       const cachedHabits = firestoreService.getCachedHabits(currentUser.uid);
       if (cachedHabits.length > 0) {
-        // Merge Firebase data with local cache (local takes priority)
         setHabits(cachedHabits);
       } else {
         setHabits(data);
