@@ -516,6 +516,7 @@ const StatsFooter = ({ habits }) => {
 // --- COMPONENT: HABITS PAGE (Refactored) ---
 function HabitsPage({ habits, onToggle, onAdd }) {
   const { currentUser } = useAuth();
+  const { isOnline } = useOffline();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newHabitName, setNewHabitName] = useState("");
 
@@ -596,9 +597,17 @@ function HabitsPage({ habits, onToggle, onAdd }) {
 
   const handleSaveEdit = async () => {
     if (editHabitName.trim() && editingHabit) {
-      await firestoreService.updateHabitNameInFirestore(currentUser.uid, editingHabit.id, editHabitName.trim());
-      setEditModalOpen(false);
-      setEditingHabit(null);
+      try {
+        await firestoreService.updateHabitNameOffline(currentUser.uid, editingHabit.id, editHabitName.trim());
+        setEditModalOpen(false);
+        setEditingHabit(null);
+      } catch (error) {
+        if (error.message.includes('offline')) {
+          showToast('Cannot Edit Habits Offline', 'Please connect to internet to edit habits', 'warning');
+        } else {
+          showToast('Error Updating Habit', error.message, 'error');
+        }
+      }
     }
   };
 
@@ -651,7 +660,14 @@ function HabitsPage({ habits, onToggle, onAdd }) {
                 </svg>
               </button>
             </div>
-            <button className="btn-add-habit" onClick={() => setIsModalOpen(true)}>+ Add Habit</button>
+            <button 
+              className="btn-add-habit" 
+              onClick={() => setIsModalOpen(true)}
+              disabled={!isOnline}
+              title={isOnline ? "Add new habit" : "Cannot add habits while offline"}
+            >
+              {isOnline ? "+ Add Habit" : "📴 Offline"}
+            </button>
           </div>
 
           <div className="table-wrapper">
@@ -673,19 +689,20 @@ function HabitsPage({ habits, onToggle, onAdd }) {
                   habits.map(habit => (
                     <tr key={habit.id}>
                       <td
-                        className="habit-name-cell"
-                        onClick={() => handleEditClick(habit)}
+                        className={`habit-name-cell ${isOnline ? 'editable' : 'disabled'}`}
+                        onClick={() => isOnline && handleEditClick(habit)}
                         style={{
-                          cursor: 'pointer',
+                          cursor: isOnline ? 'pointer' : 'not-allowed',
                           fontWeight: 600,
-                          color: '#1e293b',
+                          color: isOnline ? '#1e293b' : '#64748b',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '0.5rem'
+                          gap: '0.5rem',
+                          opacity: isOnline ? 1 : 0.7
                         }}
-                        title="Click to edit"
+                        title={isOnline ? "Click to edit" : "Cannot edit habits while offline"}
                       >
-                        <span>📝</span> {habit.name}
+                        <span>{isOnline ? '📝' : '🔒'}</span> {habit.name}
                       </td>
                       {daysArray.map((d) => {
                         const dateKey = getViewDateKey(d);
@@ -752,7 +769,13 @@ function HabitsPage({ habits, onToggle, onAdd }) {
               >
                 Cancel
               </button>
-              <button className="btn-primary" onClick={handleAddClick}>Add Habit</button>
+              <button 
+                className="btn-primary" 
+                onClick={handleAddClick}
+                disabled={!isOnline}
+              >
+                {isOnline ? "Add Habit" : "📴 Cannot Add Offline"}
+              </button>
             </div>
           </div>
         </div>
@@ -1052,6 +1075,7 @@ const Settings = ({ settings, onSettingsChange, habits }) => {
 const JournalEntry = ({ journalEntries, onSave }) => {
   const { date } = useParams();
   const navigate = useNavigate();
+  const { isOnline } = useOffline();
 
   const defaultEntry = {
     mood: '', gratitude: '', highlights: '', challenges: '', learning: '', goals: '', notes: ''
@@ -1144,13 +1168,25 @@ const JournalEntry = ({ journalEntries, onSave }) => {
               </svg>
               {showClearConfirm ? 'Confirm?' : 'Clear'}
             </button>
-            <button className="btn-primary" onClick={handleSave} style={{ minWidth: '140px', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+            <button 
+              className="btn-primary" 
+              onClick={handleSave} 
+              disabled={!isOnline}
+              style={{ 
+                minWidth: '140px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '6px', 
+                justifyContent: 'center',
+                opacity: isOnline ? 1 : 0.7
+              }}
+            >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                 <polyline points="17 21 17 13 7 13 7 21"></polyline>
                 <polyline points="7 3 7 8 15 8"></polyline>
               </svg>
-              {saveStatus ? 'Saved! ✓' : 'Save Entry'}
+              {saveStatus ? 'Saved! ✓' : (isOnline ? 'Save Entry' : '📴 Cannot Save Offline')}
             </button>
           </div>
         </header>
@@ -1786,29 +1822,45 @@ function App() {
   };
 
   const addHabit = async (name) => {
-    const newHabit = {
-      id: Date.now().toString(),
-      name,
-      logs: {}
-    };
-    
-    // Use offline-enabled function
-    await firestoreService.addHabitOffline(currentUser.uid, newHabit);
-    
-    // Update local state immediately
-    setHabits([...habits, newHabit]);
+    try {
+      const newHabit = {
+        id: Date.now().toString(),
+        name,
+        logs: {}
+      };
+      
+      // Use offline-enabled function
+      await firestoreService.addHabitOffline(currentUser.uid, newHabit);
+      
+      // Update local state immediately
+      setHabits([...habits, newHabit]);
+    } catch (error) {
+      if (error.message.includes('offline')) {
+        showToast('Cannot Add Habits Offline', 'Please connect to internet to add new habits', 'warning');
+      } else {
+        showToast('Error Adding Habit', error.message, 'error');
+      }
+    }
   };
 
   // Save Journal Entry Handler
   const saveJournalEntry = async (date, data) => {
-    // Use offline-enabled function
-    await firestoreService.saveJournalEntryOffline(currentUser.uid, date, data);
-    
-    // Update local state immediately
-    setJournalEntries(prev => ({
-      ...prev,
-      [date]: data
-    }));
+    try {
+      // Use offline-enabled function
+      await firestoreService.saveJournalEntryOffline(currentUser.uid, date, data);
+      
+      // Update local state immediately
+      setJournalEntries(prev => ({
+        ...prev,
+        [date]: data
+      }));
+    } catch (error) {
+      if (error.message.includes('offline')) {
+        showToast('Cannot Save Journal Offline', 'Please connect to internet to save journal entries', 'warning');
+      } else {
+        showToast('Error Saving Entry', error.message, 'error');
+      }
+    }
   };
 
   // Email management handlers

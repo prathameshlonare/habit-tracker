@@ -180,22 +180,32 @@ export const toggleHabitOffline = async (userId, habitId, dateKey, completed) =>
 };
 
 /**
- * Offline-enabled new habit addition
+ * Online-only new habit addition (disabled offline)
  */
 export const addHabitOffline = async (userId, habit) => {
+    // Only add habits when online (as per requirement)
+    if (!navigator.onLine) {
+        throw new Error('Cannot add habits while offline');
+    }
+    
     // Update local state immediately
     const localHabits = JSON.parse(localStorage.getItem(`habits_${userId}`) || '[]');
     localHabits.push(habit);
     localStorage.setItem(`habits_${userId}`, JSON.stringify(localHabits));
     
-    // Use sync service for offline-aware sync
+    // Use sync service for direct sync
     await syncService.syncNewHabit(userId, habit);
 };
 
 /**
- * Offline-enabled habit name update
+ * Online-only habit name update (disabled offline)
  */
 export const updateHabitNameOffline = async (userId, habitId, name) => {
+    // Only update habit names when online
+    if (!navigator.onLine) {
+        throw new Error('Cannot edit habits while offline');
+    }
+    
     // Update local state immediately
     const localHabits = JSON.parse(localStorage.getItem(`habits_${userId}`) || '[]');
     const habitIndex = localHabits.findIndex(h => h.id === habitId);
@@ -205,7 +215,7 @@ export const updateHabitNameOffline = async (userId, habitId, name) => {
         localStorage.setItem(`habits_${userId}`, JSON.stringify(localHabits));
     }
     
-    // Use sync service for offline-aware sync
+    // Use sync service for direct sync
     await syncService.syncUpdateHabitName(userId, habitId, name);
 };
 
@@ -223,15 +233,20 @@ export const deleteHabitOffline = async (userId, habitId) => {
 };
 
 /**
- * Offline-enabled journal entry save
+ * Online-only journal entry save (disabled offline)
  */
 export const saveJournalEntryOffline = async (userId, date, entry) => {
+    // Only save journal entries when online
+    if (!navigator.onLine) {
+        throw new Error('Cannot save journal entries while offline');
+    }
+    
     // Update local state immediately
     const localJournal = JSON.parse(localStorage.getItem(`journal_${userId}`) || '{}');
     localJournal[date] = entry;
     localStorage.setItem(`journal_${userId}`, JSON.stringify(localJournal));
     
-    // Use sync service for offline-aware sync
+    // Use sync service for direct sync
     await syncService.syncJournalEntry(userId, date, entry);
 };
 

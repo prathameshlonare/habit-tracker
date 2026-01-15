@@ -74,6 +74,28 @@
   padding-top: 60px;
 }
 
+/* Offline disabled states */
+.habit-name-cell.disabled {
+  opacity: 0.7;
+  cursor: not-allowed !important;
+}
+
+.habit-name-cell.editable:hover {
+  background-color: #f8fafc;
+}
+
+.btn-add-habit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #94a3b8;
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: #94a3b8;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .offline-indicator {
