@@ -2,11 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import './Settings.css';
 import './Toast.css';
+import './OfflineIndicator.css';
 import { BrowserRouter as Router, Routes, Route, Link, NavLink, useParams, useNavigate, Navigate } from 'react-router-dom';
 import { exportToPDF } from './exportPDF';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { OfflineProvider } from './contexts/OfflineContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './components/Login';
+import OfflineIndicator from './components/OfflineIndicator';
 import * as firestoreService from './services/firestoreService';
 import {
   Chart as ChartJS,
@@ -1570,9 +1573,11 @@ const ToastContainer = ({ toasts, onRemove }) => {
 const AppWrapper = () => {
   return (
     <AuthProvider>
-      <Router>
-        <App />
-      </Router>
+      <OfflineProvider>
+        <Router>
+          <App />
+        </Router>
+      </OfflineProvider>
     </AuthProvider>
   );
 };
@@ -1625,6 +1630,9 @@ function App() {
           localStorage.removeItem('habits');
         }
       }
+      
+      // Cache data locally for offline access
+      firestoreService.cacheHabitsLocally(currentUser.uid, data);
       setHabits(data);
     });
 
@@ -1639,6 +1647,9 @@ function App() {
           localStorage.removeItem('journalEntries');
         }
       }
+      
+      // Cache data locally for offline access
+      firestoreService.cacheJournalLocally(currentUser.uid, data);
       setJournalEntries(data);
     });
 
@@ -1647,6 +1658,26 @@ function App() {
       unsubscribeJournal();
     };
   }, [currentUser]);
+
+  // Offline data fallback
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    // If no internet or data not loaded yet, try to load from cache
+    if (habits.length === 0) {
+      const cachedHabits = firestoreService.getCachedHabits(currentUser.uid);
+      if (cachedHabits.length > 0) {
+        setHabits(cachedHabits);
+      }
+    }
+    
+    if (Object.keys(journalEntries).length === 0) {
+      const cachedJournal = firestoreService.getCachedJournal(currentUser.uid);
+      if (Object.keys(cachedJournal).length > 0) {
+        setJournalEntries(cachedJournal);
+      }
+    }
+  }, [currentUser, habits.length, Object.keys(journalEntries).length]);
 
   // Toast callback setup
   useEffect(() => {
@@ -1733,6 +1764,7 @@ function App() {
     if (!habit) return;
 
     const newLogs = { ...habit.logs };
+    const completed = !newLogs[dateKey];
 
     // If currently checked, delete the entry; if unchecked, set to true
     if (newLogs[dateKey]) {
@@ -1741,7 +1773,11 @@ function App() {
       newLogs[dateKey] = true; // Add the key when checking
     }
 
-    await firestoreService.updateHabitLogsInFirestore(currentUser.uid, habitId, newLogs);
+    // Use offline-enabled function
+    await firestoreService.toggleHabitOffline(currentUser.uid, habitId, dateKey, completed);
+
+    // Update local state immediately for UI responsiveness
+    setHabits(habits.map(h => h.id === habitId ? { ...h, logs: newLogs } : h));
 
     // Achievement checks (only when checking, not unchecking)
     if (newLogs[dateKey]) {
@@ -1755,12 +1791,24 @@ function App() {
       name,
       logs: {}
     };
-    await firestoreService.addHabitToFirestore(currentUser.uid, newHabit);
+    
+    // Use offline-enabled function
+    await firestoreService.addHabitOffline(currentUser.uid, newHabit);
+    
+    // Update local state immediately
+    setHabits([...habits, newHabit]);
   };
 
   // Save Journal Entry Handler
   const saveJournalEntry = async (date, data) => {
-    await firestoreService.saveJournalEntryInFirestore(currentUser.uid, date, data);
+    // Use offline-enabled function
+    await firestoreService.saveJournalEntryOffline(currentUser.uid, date, data);
+    
+    // Update local state immediately
+    setJournalEntries(prev => ({
+      ...prev,
+      [date]: data
+    }));
   };
 
   // Email management handlers
@@ -1784,6 +1832,7 @@ function App() {
   return (
     <>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
+      <OfflineIndicator />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route

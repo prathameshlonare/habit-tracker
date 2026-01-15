@@ -62,6 +62,19 @@ button::-moz-focus-inner {
   border: 0;
 }
 
+/* ========================================
+   ANIMATIONS
+   ======================================== */
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
 
 /* ========================================
    2. MOBILE BASE LAYOUT (Default)

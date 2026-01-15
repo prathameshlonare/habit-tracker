@@ -10,6 +10,7 @@ import {
     query,
     onSnapshot
 } from 'firebase/firestore';
+import syncService from './syncService';
 
 /**
  * Syncs habits from localStorage to Firestore if they don't exist
@@ -153,5 +154,114 @@ export const deleteAllUserDataFromFirestore = async (userId) => {
         deleteAllHabitsFromFirestore(userId),
         deleteAllJournalEntriesFromFirestore(userId)
     ]);
+};
+
+// ==================== OFFLINE-ENABLED FUNCTIONS ====================
+
+/**
+ * Offline-enabled habit toggle
+ */
+export const toggleHabitOffline = async (userId, habitId, dateKey, completed) => {
+    // Update local state immediately for UI responsiveness
+    const localHabits = JSON.parse(localStorage.getItem(`habits_${userId}`) || '[]');
+    const habitIndex = localHabits.findIndex(h => h.id === habitId);
+    
+    if (habitIndex !== -1) {
+        if (completed) {
+            localHabits[habitIndex].logs[dateKey] = true;
+        } else {
+            delete localHabits[habitIndex].logs[dateKey];
+        }
+        localStorage.setItem(`habits_${userId}`, JSON.stringify(localHabits));
+    }
+    
+    // Use sync service for offline-aware sync
+    await syncService.syncHabitToggle(userId, habitId, dateKey, completed);
+};
+
+/**
+ * Offline-enabled new habit addition
+ */
+export const addHabitOffline = async (userId, habit) => {
+    // Update local state immediately
+    const localHabits = JSON.parse(localStorage.getItem(`habits_${userId}`) || '[]');
+    localHabits.push(habit);
+    localStorage.setItem(`habits_${userId}`, JSON.stringify(localHabits));
+    
+    // Use sync service for offline-aware sync
+    await syncService.syncNewHabit(userId, habit);
+};
+
+/**
+ * Offline-enabled habit name update
+ */
+export const updateHabitNameOffline = async (userId, habitId, name) => {
+    // Update local state immediately
+    const localHabits = JSON.parse(localStorage.getItem(`habits_${userId}`) || '[]');
+    const habitIndex = localHabits.findIndex(h => h.id === habitId);
+    
+    if (habitIndex !== -1) {
+        localHabits[habitIndex].name = name;
+        localStorage.setItem(`habits_${userId}`, JSON.stringify(localHabits));
+    }
+    
+    // Use sync service for offline-aware sync
+    await syncService.syncUpdateHabitName(userId, habitId, name);
+};
+
+/**
+ * Offline-enabled habit deletion
+ */
+export const deleteHabitOffline = async (userId, habitId) => {
+    // Update local state immediately
+    const localHabits = JSON.parse(localStorage.getItem(`habits_${userId}`) || '[]');
+    const filteredHabits = localHabits.filter(h => h.id !== habitId);
+    localStorage.setItem(`habits_${userId}`, JSON.stringify(filteredHabits));
+    
+    // Use sync service for offline-aware sync
+    await syncService.syncDeleteHabit(userId, habitId);
+};
+
+/**
+ * Offline-enabled journal entry save
+ */
+export const saveJournalEntryOffline = async (userId, date, entry) => {
+    // Update local state immediately
+    const localJournal = JSON.parse(localStorage.getItem(`journal_${userId}`) || '{}');
+    localJournal[date] = entry;
+    localStorage.setItem(`journal_${userId}`, JSON.stringify(localJournal));
+    
+    // Use sync service for offline-aware sync
+    await syncService.syncJournalEntry(userId, date, entry);
+};
+
+/**
+ * Cache habits locally for offline access
+ */
+export const cacheHabitsLocally = (userId, habits) => {
+    localStorage.setItem(`habits_${userId}`, JSON.stringify(habits));
+};
+
+/**
+ * Cache journal entries locally for offline access
+ */
+export const cacheJournalLocally = (userId, entries) => {
+    localStorage.setItem(`journal_${userId}`, JSON.stringify(entries));
+};
+
+/**
+ * Get cached habits for offline access
+ */
+export const getCachedHabits = (userId) => {
+    const cached = localStorage.getItem(`habits_${userId}`);
+    return cached ? JSON.parse(cached) : [];
+};
+
+/**
+ * Get cached journal entries for offline access
+ */
+export const getCachedJournal = (userId) => {
+    const cached = localStorage.getItem(`journal_${userId}`);
+    return cached ? JSON.parse(cached) : {};
 };
 
