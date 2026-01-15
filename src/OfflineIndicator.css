@@ -1,0 +1,97 @@
+/* Offline Indicator Styles */
+.offline-indicator {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  padding: 0.75rem 1rem;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  transition: all 0.3s ease;
+}
+
+.offline-indicator.offline {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+}
+
+.offline-indicator.syncing {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+}
+
+.indicator-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.indicator-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.indicator-text {
+  flex: 1;
+  text-align: center;
+}
+
+.sync-btn {
+  background: white;
+  color: #3b82f6;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.sync-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  transform: translateY(-1px);
+}
+
+.sync-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Add spacing for fixed indicator */
+.app {
+  padding-top: 0;
+}
+
+.app.has-offline-indicator {
+  padding-top: 60px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .offline-indicator {
+    padding: 0.6rem 0.75rem;
+    font-size: 0.85rem;
+  }
+  
+  .indicator-content {
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  
+  .indicator-text {
+    font-size: 0.8rem;
+  }
+  
+  .sync-btn {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.8rem;
+  }
+}
