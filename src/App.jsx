@@ -1711,12 +1711,7 @@ function App() {
     const loadFromCache = () => {
       const cachedHabits = firestoreService.getCachedHabits(currentUser.uid);
       const cachedJournal = firestoreService.getCachedJournal(currentUser.uid);
-      
-      console.log('📦 Loading from cache:', {
-        cachedHabits: cachedHabits.length,
-        cachedJournal: Object.keys(cachedJournal).length
-      });
-      
+
       if (cachedHabits.length > 0) {
         setHabits(cachedHabits);
       }
@@ -1741,7 +1736,6 @@ function App() {
     if (!currentUser) return;
     
     const handleOnline = async () => {
-      console.log('🌐 Back online - checking for queued actions');
       // Give a small delay to ensure Firebase is ready
       setTimeout(() => {
         const { syncNow } = require('./contexts/OfflineContext');

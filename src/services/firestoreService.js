@@ -165,18 +165,16 @@ export const toggleHabitOffline = async (userId, habitId, dateKey, completed) =>
     // Update local state immediately for UI responsiveness
     const localHabits = JSON.parse(localStorage.getItem(`habits_${userId}`) || '[]');
     const habitIndex = localHabits.findIndex(h => h.id === habitId);
-    
+
     if (habitIndex !== -1) {
         if (completed) {
             localHabits[habitIndex].logs[dateKey] = true;
-            console.log(`✅ Ticked habit ${habitId} for ${dateKey}`);
         } else {
             delete localHabits[habitIndex].logs[dateKey];
-            console.log(`❌ Unticked habit ${habitId} for ${dateKey}`);
         }
         localStorage.setItem(`habits_${userId}`, JSON.stringify(localHabits));
     }
-    
+
     // Use sync service for offline-aware sync
     await syncService.syncHabitToggle(userId, habitId, dateKey, completed);
 };
@@ -189,12 +187,12 @@ export const addHabitOffline = async (userId, habit) => {
     if (!navigator.onLine) {
         throw new Error('Cannot add habits while offline');
     }
-    
+
     // Update local state immediately
     const localHabits = JSON.parse(localStorage.getItem(`habits_${userId}`) || '[]');
     localHabits.push(habit);
     localStorage.setItem(`habits_${userId}`, JSON.stringify(localHabits));
-    
+
     // Use sync service for direct sync
     await syncService.syncNewHabit(userId, habit);
 };
@@ -207,16 +205,16 @@ export const updateHabitNameOffline = async (userId, habitId, name) => {
     if (!navigator.onLine) {
         throw new Error('Cannot edit habits while offline');
     }
-    
+
     // Update local state immediately
     const localHabits = JSON.parse(localStorage.getItem(`habits_${userId}`) || '[]');
     const habitIndex = localHabits.findIndex(h => h.id === habitId);
-    
+
     if (habitIndex !== -1) {
         localHabits[habitIndex].name = name;
         localStorage.setItem(`habits_${userId}`, JSON.stringify(localHabits));
     }
-    
+
     // Use sync service for direct sync
     await syncService.syncUpdateHabitName(userId, habitId, name);
 };
@@ -229,7 +227,7 @@ export const deleteHabitOffline = async (userId, habitId) => {
     const localHabits = JSON.parse(localStorage.getItem(`habits_${userId}`) || '[]');
     const filteredHabits = localHabits.filter(h => h.id !== habitId);
     localStorage.setItem(`habits_${userId}`, JSON.stringify(filteredHabits));
-    
+
     // Use sync service for offline-aware sync
     await syncService.syncDeleteHabit(userId, habitId);
 };
@@ -242,12 +240,12 @@ export const saveJournalEntryOffline = async (userId, date, entry) => {
     if (!navigator.onLine) {
         throw new Error('Cannot save journal entries while offline');
     }
-    
+
     // Update local state immediately
     const localJournal = JSON.parse(localStorage.getItem(`journal_${userId}`) || '{}');
     localJournal[date] = entry;
     localStorage.setItem(`journal_${userId}`, JSON.stringify(localJournal));
-    
+
     // Use sync service for direct sync
     await syncService.syncJournalEntry(userId, date, entry);
 };
@@ -261,7 +259,6 @@ export const cacheHabitsLocally = (userId, habits) => {
         localStorage.setItem(`habits_${userId}`, JSON.stringify(habits));
         localStorage.setItem(`habits_${userId}_backup`, JSON.stringify(habits));
         if (process.env.NODE_ENV === 'development') {
-            console.log(`💾 Cached ${habits.length} habits for user ${userId}`);
         }
     } catch (error) {
         console.error('❌ Failed to cache habits:', error);
@@ -283,27 +280,18 @@ export const getCachedHabits = (userId) => {
         // Try multiple cache keys for robustness
         const cacheKeys = [`habits_${userId}`, `habits_${userId}_backup`];
         let habits = [];
-        
+
         for (const key of cacheKeys) {
             const cached = localStorage.getItem(key);
             if (cached) {
                 const parsed = JSON.parse(cached);
                 if (parsed.length > 0) {
                     habits = parsed;
-                    console.log(`📦 Loaded ${habits.length} cached habits from ${key}`);
                     break;
                 }
             }
         }
-        
-        if (habits.length > 0) {
-            console.log('📊 Cached habit details:', habits.map(h => ({
-                name: h.name,
-                logsCount: Object.keys(h.logs).length,
-                hasTodayLogs: h.logs[new Date().toISOString().split('T')[0]]
-            })));
-        }
-        
+
         return habits;
     } catch (error) {
         console.error('❌ Failed to load cached habits:', error);
