@@ -164,7 +164,14 @@ function AnalyticsPage({ habits }) {
   // --- 1. METRICS LOGIC (Preserved) ---
   const activeHabits = habits.length;
   const totalCompleted = habits.reduce((sum, habit) => sum + Object.keys(habit.logs).length, 0);
-  const totalPossible = 30 * activeHabits;
+  
+  // Calculate current month days for accurate progress
+  const today = new Date();
+  const currentActualYear = today.getFullYear();
+  const currentActualMonth = today.getMonth() + 1;
+  const daysInCurrentMonth = new Date(currentActualYear, currentActualMonth, 0).getDate();
+  
+  const totalPossible = daysInCurrentMonth * activeHabits;
   const avgCompletion = totalPossible === 0 ? 0 : Math.round((totalCompleted / totalPossible) * 100);
 
   let longestStreak = 0;
@@ -1789,8 +1796,14 @@ function App() {
         <Route
           path="/*"
           element={
-            <ProtectedRoute>
-              <div className="app-container">
+              <ProtectedRoute>
+              <div className="app-container" style={{ 
+                backgroundImage: 'linear-gradient(rgba(255,255,255,0.9), rgba(55,48,163,0.1)), url({373AF773-68D8-4391-9898-B8F016DD099B}.png)',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
+                minHeight: '100vh'
+              }}>
                 <nav className="navbar">
                   <div className="navbar-inner">
                     <div className="logo">

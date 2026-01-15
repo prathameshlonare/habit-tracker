@@ -20,8 +20,8 @@ export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 export const db = getFirestore(app);
 
-// Whitelisted email addresses - REPLACE WITH YOUR ACTUAL EMAILS
+// Whitelisted email addresses - This should come from environment variables
 export const ALLOWED_EMAILS = [
-    'prathameshlonare9@gmail.com',
-    'khushibhorjar@gmail.com'
-];
+    import.meta.env.VITE_ALLOWED_EMAIL_1 || '',
+    import.meta.env.VITE_ALLOWED_EMAIL_2 || ''
+].filter(email => email.trim() !== '');
