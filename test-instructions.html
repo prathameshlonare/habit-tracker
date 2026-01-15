@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Offline Test</title>
+</head>
+<body>
+    <h1>Testing Offline Mode</h1>
+    <p>Steps to test:</p>
+    <ol>
+        <li>Open http://localhost:5174</li>
+        <li>Login with your account</li>
+        <li>Once loaded, go offline (disconnect WiFi or use DevTools)</li>
+        <li>Try these operations:</li>
+        <ul>
+            <li>✅ Should see existing habits</li>
+            <li>✅ Should be able to tick/untick checkboxes</li>
+            <li>❌ Should NOT be able to add new habits (button disabled)</li>
+            <li>❌ Should NOT be able to edit habits (no edit access)</li>
+            <li>❌ Should NOT be able to save journal (button disabled)</li>
+        </ul>
+        <li>Go back online - all changes should sync</li>
+    </ol>
+    
+    <h2>Expected Behavior:</h2>
+    <ul>
+        <li><strong>Offline Indicator:</strong> Shows 📴 "Offline Mode" banner</li>
+        <li><strong>Add Habit Button:</strong> Shows "📴 Offline" and disabled</li>
+        <li><strong>Habit Names:</strong> Show 🔒 icon, no edit access</li>
+        <li><strong>Journal Save:</strong> Shows "📴 Cannot Save Offline" and disabled</li>
+        <li><strong>Checkboxes:</strong> Work normally for tracking</li>
+    </ul>
+    
+    <p><strong>If you still see errors, please share the exact error message.</strong></p>
+</body>
+</html>

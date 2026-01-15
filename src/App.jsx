@@ -6,7 +6,7 @@ import './OfflineIndicator.css';
 import { BrowserRouter as Router, Routes, Route, Link, NavLink, useParams, useNavigate, Navigate } from 'react-router-dom';
 import { exportToPDF } from './exportPDF';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { OfflineProvider } from './contexts/OfflineContext';
+import { OfflineProvider, useOffline } from './contexts/OfflineContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './components/Login';
 import OfflineIndicator from './components/OfflineIndicator';
