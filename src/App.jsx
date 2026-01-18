@@ -661,15 +661,10 @@ function HabitsPage({ habits, onToggle, onAdd }) {
                   habits.map(habit => (
                     <tr key={habit.id}>
                       <td
-                        className="habit-name-cell"
+                        className="habit-col habit-name-cell"
                         onClick={() => handleEditClick(habit)}
                         style={{
-                          cursor: 'pointer',
-                          fontWeight: 600,
-                          color: '#1e293b',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.5rem'
+                          cursor: 'pointer'
                         }}
                         title="Click to edit"
                       >
