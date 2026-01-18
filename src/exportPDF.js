@@ -207,7 +207,7 @@ export const exportToPDF = (habits, setSaveStatus) => {
         setTimeout(() => setSaveStatus(''), 3000);
 
     } catch (error) {
-        console.error('PDF generation error:', error);
+        // Error already handled via setSaveStatus
         setSaveStatus('PDF generation failed ✗');
         setTimeout(() => setSaveStatus(''), 3000);
     }

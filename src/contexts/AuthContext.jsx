@@ -8,9 +8,7 @@ import { auth, googleProvider, ALLOWED_EMAILS } from '../firebase';
 
 const AuthContext = createContext({});
 
-export const useAuth = () => useContext(AuthContext);
-
-export const AuthProvider = ({ children }) => {
+const AuthProvider = ({ children }) => {
     const [currentUser, setCurrentUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -85,9 +83,13 @@ export const AuthProvider = ({ children }) => {
         isEmailAuthorized
     };
 
-    return (
+return (
         <AuthContext.Provider value={value}>
             {children}
         </AuthContext.Provider>
     );
 };
+
+// eslint-disable-next-line react-refresh/only-export-components
+export const useAuth = () => useContext(AuthContext);
+export { AuthProvider };

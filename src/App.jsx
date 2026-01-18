@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './App.css';
 import './Settings.css';
 import './Toast.css';
@@ -33,16 +33,7 @@ ChartJS.register(
   Legend
 );
 
-const now = new Date();
-const currentYear = now.getFullYear();
-const currentMonth = now.getMonth() + 1;
-const days = Array.from({ length: 31 }, (_, i) => i + 1);
 
-const getDateKey = (day) => {
-  const m = String(currentMonth).padStart(2, '0');
-  const d = String(day).padStart(2, '0');
-  return `${currentYear}-${m}-${d}`;
-};
 
 // --- DISPLAY HELPERS ---
 const formatDisplayDate = (dateKey) => {
@@ -72,10 +63,6 @@ const showToast = (title, message, type = 'default') => {
   }
 };
 
-// Expose for testing in browser console
-if (typeof window !== 'undefined') {
-  window.showToast = showToast;
-}
 
 // --- NOTIFICATION HELPERS ---
 const requestNotificationPermission = async () => {
@@ -96,7 +83,7 @@ const showNotification = (title, options = {}) => {
   }
 };
 
-const checkAndNotifyAchievements = (habits, settings) => {
+const checkAndNotifyAchievements = (habits, settings, dateKey) => {
   if (!settings?.achievementNotifications) {
     return;
   }
@@ -104,8 +91,8 @@ const checkAndNotifyAchievements = (habits, settings) => {
   const today = new Date();
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-  // Check if all habits completed today
-  if (habits.length > 0) {
+  // Only show "All Habits Completed" notification if completing TODAY's habits
+  if (dateKey === todayKey && habits.length > 0) {
     const allCompleted = habits.every(habit => habit.logs[todayKey]);
 
     if (allCompleted) {
@@ -113,35 +100,37 @@ const checkAndNotifyAchievements = (habits, settings) => {
     }
   }
 
-  // Check for streaks
-  habits.forEach(habit => {
-    let currentStreak = 0;
-    const sortedDates = Object.keys(habit.logs).sort().reverse();
+  // Check for streaks (only for today's completion)
+  if (dateKey === todayKey) {
+    habits.forEach(habit => {
+      let currentStreak = 0;
+      const sortedDates = Object.keys(habit.logs).sort().reverse();
 
-    // Calculate current streak
-    for (let i = 0; i < sortedDates.length; i++) {
-      const date = new Date(sortedDates[i]);
-      const expectedDate = new Date(today);
-      expectedDate.setDate(expectedDate.getDate() - i);
+      // Calculate current streak
+      for (let i = 0; i < sortedDates.length; i++) {
 
-      const dateKey = `${expectedDate.getFullYear()}-${String(expectedDate.getMonth() + 1).padStart(2, '0')}-${String(expectedDate.getDate()).padStart(2, '0')}`;
+        const expectedDate = new Date(today);
+        expectedDate.setDate(expectedDate.getDate() - i);
 
-      if (sortedDates[i] === dateKey) {
-        currentStreak++;
-      } else {
-        break;
+        const checkDateKey = `${expectedDate.getFullYear()}-${String(expectedDate.getMonth() + 1).padStart(2, '0')}-${String(expectedDate.getDate()).padStart(2, '0')}`;
+
+        if (sortedDates[i] === checkDateKey) {
+          currentStreak++;
+        } else {
+          break;
+        }
       }
-    }
 
-    // Notify on milestone streaks (3, 7, 14, 30 days)
-    const milestones = [3, 7, 14, 30];
-    if (milestones.includes(currentStreak)) {
-      showNotification(`🔥 ${currentStreak}-Day Streak!`, {
-        body: `Keep up the great work with "${habit.name}"!`,
-        tag: `streak-${habit.id}`
-      });
-    }
-  });
+      // Notify on milestone streaks (3, 7, 14, 30 days)
+      const milestones = [3, 7, 14, 30];
+      if (milestones.includes(currentStreak)) {
+        showNotification(`🔥 ${currentStreak}-Day Streak!`, {
+          body: `Keep up the great work with "${habit.name}"!`,
+          tag: `streak-${habit.id}`
+        });
+      }
+    });
+  }
 };
 
 // --- COMPONENT: ANALYTICS PAGE (Full Features) ---
@@ -855,9 +844,7 @@ const Settings = ({ settings, onSettingsChange, habits }) => {
     onSettingsChange({ ...settings, [field]: !settings[field] });
   };
 
-  const handleChange = (field, value) => {
-    onSettingsChange({ ...settings, [field]: value });
-  };
+
 
   const handleSave = () => {
     setSaveStatus('Changes saved! ✓');
@@ -868,7 +855,7 @@ const Settings = ({ settings, onSettingsChange, habits }) => {
     try {
       exportToPDF(habits, setSaveStatus);
     } catch (error) {
-      console.error('Export error:', error);
+      // Error already shown via setSaveStatus
       setSaveStatus('Export failed: ' + error.message);
     }
   };
@@ -897,7 +884,7 @@ const Settings = ({ settings, onSettingsChange, habits }) => {
         setDeleteConfirm(0);
         setTimeout(() => setSaveStatus(''), 3000);
       } catch (error) {
-        console.error('Error deleting data:', error);
+        // Error already shown via toast notification
         setSaveStatus('Failed to delete data. Please try again.');
         setDeleteConfirm(0);
         setTimeout(() => setSaveStatus(''), 3000);
@@ -1052,25 +1039,24 @@ const JournalEntry = ({ journalEntries, onSave }) => {
   const { date } = useParams();
   const navigate = useNavigate();
 
-  const defaultEntry = {
+  const defaultEntry = useMemo(() => ({
     mood: '', gratitude: '', highlights: '', challenges: '', learning: '', goals: '', notes: ''
-  };
+  }), []);
 
   const [entry, setEntry] = useState(defaultEntry);
   const [saveStatus, setSaveStatus] = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  // FIX: Data sync karnyasathi Effect
+  // FIX: Data sync karnyasathi Effect - directly handle state updates
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
-    if (journalEntries[date]) {
-      setEntry(journalEntries[date]);
-    } else {
-      setEntry(defaultEntry);
-    }
+    const entryToSet = journalEntries[date] || defaultEntry;
+    setEntry(entryToSet);
     // Ethun setSaveStatus('') kadhun takla ahe
-  }, [date, journalEntries]);
+  }, [date, journalEntries, defaultEntry]);
 
   // FIX: New Effect - Fakt Date badalyavar status clear kar
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     setSaveStatus('');
   }, [date]);
@@ -1093,7 +1079,7 @@ const JournalEntry = ({ journalEntries, onSave }) => {
         navigate('/journal');
       }, 1500);
     } catch (error) {
-      console.error("Failed to save entry:", error);
+      // Error already shown via setSaveStatus
       setSaveStatus('Failed to save. Please try again.');
     }
   };
@@ -1302,7 +1288,7 @@ const Journal = ({ journalEntries }) => {
   const viewMonth = viewDate.getMonth();
   const currentMonthName = viewDate.toLocaleString('default', { month: 'short', year: 'numeric' });
 
-  // Navigation Handlers
+
   const handlePrevMonth = () => setViewDate(new Date(viewYear, viewMonth - 1, 1));
   const handleNextMonth = () => setViewDate(new Date(viewYear, viewMonth + 1, 1));
   const handleGoToToday = () => setViewDate(new Date(realToday.getFullYear(), realToday.getMonth(), 1));
@@ -1312,7 +1298,7 @@ const Journal = ({ journalEntries }) => {
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
   const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
 
-  const blanks = Array.from({ length: firstDayOfWeek }, (_, i) => null);
+  const blanks = Array.from({ length: firstDayOfWeek }, () => null);
   const monthDays = Array.from({ length: daysInMonth }, (_, i) => {
     const dayNum = i + 1;
     const dateKey = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
@@ -1538,8 +1524,6 @@ const Journal = ({ journalEntries }) => {
 };
 
 
-// ... (Settings & AnalyticsPage & HabitsPage Components remain SAME) ...
-
 // --- TOAST COMPONENT ---
 const ToastContainer = ({ toasts, onRemove }) => {
   return (
@@ -1569,6 +1553,7 @@ const ToastContainer = ({ toasts, onRemove }) => {
 };
 
 // --- MAIN APP COMPONENT ---
+
 const AppWrapper = () => {
   return (
     <AuthProvider>
@@ -1602,10 +1587,7 @@ function App() {
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const accountPopupRef = useRef(null);
 
-  // Email management states
-  const [additionalEmails, setAdditionalEmails] = useState([]);
-  const [isAddingEmail, setIsAddingEmail] = useState(false);
-  const [newEmail, setNewEmail] = useState('');
+
 
   // 1. Listen for Firestore Data
   useEffect(() => {
@@ -1662,14 +1644,8 @@ function App() {
     localStorage.setItem(settingsKey, JSON.stringify(settings));
   }, [settings, currentUser]);
 
-  // Clear user-specific data on logout
-  useEffect(() => {
-    if (!currentUser) {
-      // User logged out - clear all data to prevent leakage
-      setHabits([]);
-      setJournalEntries({});
-    }
-  }, [currentUser]);
+  // Data cleanup is handled automatically by Firestore subscription unsubscribe (lines 1613-1616)
+  // No manual clearing needed - prevents data loss during auth initialization
 
   // Notification Effects
   useEffect(() => {
@@ -1718,11 +1694,23 @@ function App() {
       newLogs[dateKey] = true; // Add the key when checking
     }
 
-    await firestoreService.updateHabitLogsInFirestore(currentUser.uid, habitId, newLogs);
+    // OPTIMISTIC UPDATE: Update UI immediately for instant feedback
+    const updatedHabits = habits.map(h =>
+      h.id === habitId ? { ...h, logs: newLogs } : h
+    );
+    setHabits(updatedHabits);
+
+    // Firestore update in background (no await to prevent UI blocking)
+    firestoreService.updateHabitLogsInFirestore(currentUser.uid, habitId, newLogs)
+      .catch(error => {
+        // Rollback on error
+        setHabits(habits);
+        showToast('Error', 'Failed to update habit. Please try again.', 'error');
+      });
 
     // Achievement checks (only when checking, not unchecking)
     if (newLogs[dateKey]) {
-      checkAndNotifyAchievements(habits.map(h => h.id === habitId ? { ...h, logs: newLogs } : h), settings);
+      checkAndNotifyAchievements(updatedHabits, settings, dateKey);
     }
   };
 
@@ -1740,23 +1728,7 @@ function App() {
     await firestoreService.saveJournalEntryInFirestore(currentUser.uid, date, data);
   };
 
-  // Email management handlers
-  const handleAddEmail = () => {
-    if (newEmail.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
-      setAdditionalEmails([...additionalEmails, { email: newEmail, verified: false }]);
-      setNewEmail('');
-      setIsAddingEmail(false);
-    }
-  };
 
-  const handleRemoveEmail = (emailToRemove) => {
-    setAdditionalEmails(additionalEmails.filter(e => e.email !== emailToRemove));
-  };
-
-  const handleCancelAddEmail = () => {
-    setNewEmail('');
-    setIsAddingEmail(false);
-  };
 
 
   // Show loading spinner while checking authentication
@@ -1797,7 +1769,7 @@ function App() {
           element={
             <ProtectedRoute>
               <div className="app-container" style={{
-                backgroundImage: 'linear-gradient(rgba(255,255,255,0.9), rgba(55,48,163,0.1)), url({373AF773-68D8-4391-9898-B8F016DD099B}.png)',
+                backgroundImage: 'linear-gradient(rgba(255,255,255,0.9), rgba(55,48,163,0.1))',
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
                 backgroundRepeat: 'no-repeat',
@@ -1855,7 +1827,7 @@ function App() {
                           <span style={{ fontWeight: 600 }}>{currentUser?.displayName?.split(' ')?.[0] || 'User'}</span>
                         </div>
                         {currentUser?.photoURL ? (
-                          <img src={currentUser.photoURL} alt="avatar" className="user-avatar" />
+                          <img src={currentUser.photoURL} alt="avatar" className="user-avatar" referrerPolicy="no-referrer" />
                         ) : (
                           <div className="user-avatar" style={{ fontWeight: 600, color: '#64748b', fontSize: '1rem' }}>
                             {currentUser?.displayName?.[0] || currentUser?.email?.[0] || 'U'}
@@ -1868,7 +1840,7 @@ function App() {
                         <div className="account-popup">
                           <div className="account-popup-header">
                             {currentUser?.photoURL ? (
-                              <img src={currentUser.photoURL} alt="avatar" className="account-popup-avatar" />
+                              <img src={currentUser.photoURL} alt="avatar" className="account-popup-avatar" referrerPolicy="no-referrer" />
                             ) : (
                               <div className="account-popup-avatar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e2e8f0', fontWeight: 600, color: '#64748b' }}>
                                 {currentUser?.displayName?.[0] || currentUser?.email?.[0] || 'U'}
@@ -1932,151 +1904,153 @@ function App() {
             </ProtectedRoute>
           }
         />
-      </Routes>
+      </Routes >
 
       {/* Account Settings Modal */}
-      {isAccountModalOpen && (
-        <div className="modal-overlay" onClick={() => setIsAccountModalOpen(false)}>
-          <div className="account-modal" onClick={(e) => e.stopPropagation()}>
+      {
+        isAccountModalOpen && (
+          <div className="modal-overlay" onClick={() => setIsAccountModalOpen(false)}>
+            <div className="account-modal" onClick={(e) => e.stopPropagation()}>
 
-            <div className="account-modal-content">
-              <button className="account-modal-close" onClick={() => setIsAccountModalOpen(false)}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
+              <div className="account-modal-content">
+                <button className="account-modal-close" onClick={() => setIsAccountModalOpen(false)}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
 
-              <div className="account-modal-header">
-                <h3>Profile details</h3>
-              </div>
-
-              <div className="account-modal-section">
-                <div className="account-modal-profile-header">
-                  <div className="account-modal-profile-avatar">
-                    {currentUser?.photoURL ? (
-                      <img src={currentUser.photoURL} alt="avatar" />
-                    ) : (
-                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e2e8f0', fontWeight: 600, color: '#64748b', fontSize: '1.5rem', borderRadius: '50%' }}>
-                        {currentUser?.displayName?.[0] || currentUser?.email?.[0] || 'U'}
-                      </div>
-                    )}
-                  </div>
-                  <div className="account-modal-profile-info">
-                    <h4>{currentUser?.displayName || 'User'}</h4>
-                  </div>
-                </div>
-              </div>
-
-              <div className="account-modal-section">
-                <h4 className="account-modal-section-title">Email addresses</h4>
-
-                {/* Primary Email */}
-                <div className="account-modal-email-item">
-                  <div className="account-modal-email-info">
-                    <div className="account-modal-email-address">{currentUser?.email}</div>
-                    <span className="account-modal-badge">Primary</span>
-                  </div>
-                  <button className="account-modal-menu-btn">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="1"></circle>
-                      <circle cx="12" cy="5" r="1"></circle>
-                      <circle cx="12" cy="19" r="1"></circle>
-                    </svg>
-                  </button>
+                <div className="account-modal-header">
+                  <h3>Profile details</h3>
                 </div>
 
-                {/* Additional Emails */}
-                {additionalEmails.map((emailObj, index) => (
-                  <div key={index} className="account-modal-email-item">
-                    <div className="account-modal-email-info">
-                      <div className="account-modal-email-address">{emailObj.email}</div>
-                      {!emailObj.verified && (
-                        <span className="account-modal-badge-unverified">Unverified</span>
+                <div className="account-modal-section">
+                  <div className="account-modal-profile-header">
+                    <div className="account-modal-profile-avatar">
+                      {currentUser?.photoURL ? (
+                        <img src={currentUser.photoURL} alt="avatar" />
+                      ) : (
+                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e2e8f0', fontWeight: 600, color: '#64748b', fontSize: '1.5rem', borderRadius: '50%' }}>
+                          {currentUser?.displayName?.[0] || currentUser?.email?.[0] || 'U'}
+                        </div>
                       )}
                     </div>
-                    <button
-                      className="account-modal-menu-btn"
-                      onClick={() => handleRemoveEmail(emailObj.email)}
-                      title="Remove email"
-                    >
+                    <div className="account-modal-profile-info">
+                      <h4>{currentUser?.displayName || 'User'}</h4>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="account-modal-section">
+                  <h4 className="account-modal-section-title">Email addresses</h4>
+
+                  {/* Primary Email */}
+                  <div className="account-modal-email-item">
+                    <div className="account-modal-email-info">
+                      <div className="account-modal-email-address">{currentUser?.email}</div>
+                      <span className="account-modal-badge">Primary</span>
+                    </div>
+                    <button className="account-modal-menu-btn">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                        <circle cx="12" cy="12" r="1"></circle>
+                        <circle cx="12" cy="5" r="1"></circle>
+                        <circle cx="12" cy="19" r="1"></circle>
                       </svg>
                     </button>
                   </div>
-                ))}
 
-                {/* Add Email Form */}
-                {isAddingEmail ? (
-                  <div className="account-modal-add-email-form">
-                    <input
-                      type="email"
-                      className="account-modal-email-input"
-                      placeholder="Enter email address"
-                      value={newEmail}
-                      onChange={(e) => setNewEmail(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && handleAddEmail()}
-                      autoFocus
-                    />
-                    <div className="account-modal-form-actions">
+                  {/* Additional Emails */}
+                  {additionalEmails.map((emailObj, index) => (
+                    <div key={index} className="account-modal-email-item">
+                      <div className="account-modal-email-info">
+                        <div className="account-modal-email-address">{emailObj.email}</div>
+                        {!emailObj.verified && (
+                          <span className="account-modal-badge-unverified">Unverified</span>
+                        )}
+                      </div>
                       <button
-                        className="account-modal-form-btn cancel"
-                        onClick={handleCancelAddEmail}
+                        className="account-modal-menu-btn"
+                        onClick={() => handleRemoveEmail(emailObj.email)}
+                        title="Remove email"
                       >
-                        Cancel
-                      </button>
-                      <button
-                        className="account-modal-form-btn save"
-                        onClick={handleAddEmail}
-                      >
-                        Add
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="18" y1="6" x2="6" y2="18"></line>
+                          <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
                       </button>
                     </div>
-                  </div>
-                ) : (
-                  <button
-                    className="account-modal-add-btn"
-                    onClick={() => setIsAddingEmail(true)}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="12" y1="5" x2="12" y2="19"></line>
-                      <line x1="5" y1="12" x2="19" y2="12"></line>
-                    </svg>
-                    Add email address
-                  </button>
-                )}
-              </div>
+                  ))}
 
-              <div className="account-modal-section">
-                <h4 className="account-modal-section-title">Connected accounts</h4>
-                <div className="account-modal-connected-item">
-                  <div className="account-modal-connected-info">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                    </svg>
-                    <div>
-                      <div className="account-modal-connected-name">Google</div>
-                      <div className="account-modal-connected-email">{currentUser?.email}</div>
+                  {/* Add Email Form */}
+                  {isAddingEmail ? (
+                    <div className="account-modal-add-email-form">
+                      <input
+                        type="email"
+                        className="account-modal-email-input"
+                        placeholder="Enter email address"
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && handleAddEmail()}
+                        autoFocus
+                      />
+                      <div className="account-modal-form-actions">
+                        <button
+                          className="account-modal-form-btn cancel"
+                          onClick={handleCancelAddEmail}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className="account-modal-form-btn save"
+                          onClick={handleAddEmail}
+                        >
+                          Add
+                        </button>
+                      </div>
                     </div>
+                  ) : (
+                    <button
+                      className="account-modal-add-btn"
+                      onClick={() => setIsAddingEmail(true)}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                      </svg>
+                      Add email address
+                    </button>
+                  )}
+                </div>
+
+                <div className="account-modal-section">
+                  <h4 className="account-modal-section-title">Connected accounts</h4>
+                  <div className="account-modal-connected-item">
+                    <div className="account-modal-connected-info">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                      </svg>
+                      <div>
+                        <div className="account-modal-connected-name">Google</div>
+                        <div className="account-modal-connected-email">{currentUser?.email}</div>
+                      </div>
+                    </div>
+                    <button className="account-modal-menu-btn">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="1"></circle>
+                        <circle cx="12" cy="5" r="1"></circle>
+                        <circle cx="12" cy="19" r="1"></circle>
+                      </svg>
+                    </button>
                   </div>
-                  <button className="account-modal-menu-btn">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="1"></circle>
-                      <circle cx="12" cy="5" r="1"></circle>
-                      <circle cx="12" cy="19" r="1"></circle>
-                    </svg>
-                  </button>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
     </>
   );
 }

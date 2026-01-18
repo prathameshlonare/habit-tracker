@@ -17,7 +17,7 @@ const Login = () => {
     const handleGoogleSignIn = async () => {
         try {
             await signInWithGoogle();
-        } catch (err) {
+        } catch {
             // Error is handled by AuthContext
         }
     };
