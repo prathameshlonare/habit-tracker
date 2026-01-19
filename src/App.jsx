@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import './App.css';
 import './Settings.css';
 import './Toast.css';
-import { BrowserRouter as Router, Routes, Route, Link, NavLink, useParams, useNavigate, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, NavLink, useParams, useNavigate, Navigate, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { exportToPDF } from './exportPDF';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -33,6 +34,40 @@ ChartJS.register(
   Legend
 );
 
+
+// --- FRAMER MOTION ANIMATION VARIANTS ---
+const pageVariants = {
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.3 } },
+  exit: { opacity: 0, y: -20, transition: { duration: 0.2 } }
+};
+
+const modalVariants = {
+  hidden: { opacity: 0, scale: 0.95 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    transition: { type: 'spring', duration: 0.3, bounce: 0.3 }
+  },
+  exit: {
+    opacity: 0,
+    scale: 0.95,
+    transition: { duration: 0.2 }
+  }
+};
+
+const statsContainerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.1 }
+  }
+};
+
+const statsCardVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0 }
+};
 
 
 // --- DISPLAY HELPERS ---
@@ -323,13 +358,23 @@ function AnalyticsPage({ habits }) {
   };
 
   return (
-    <div>
+    <motion.div
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+    >
       <h1 style={{ marginBottom: '1.5rem' }}>Analytics</h1>
 
       {/* 1. Metrics Grid */}
       {/* 1. Metrics Grid */}
-      <div className="stats-grid">
-        <div className="stat-card">
+      <motion.div
+        className="stats-grid"
+        variants={statsContainerVariants}
+        initial="hidden"
+        animate="visible"
+      >
+        <motion.div className="stat-card" variants={statsCardVariants}>
           <div className="stat-icon-wrapper blue">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
           </div>
@@ -337,8 +382,8 @@ function AnalyticsPage({ habits }) {
             <span className="stat-value">{activeHabits}</span>
             <span className="stat-title">Active Habits</span>
           </div>
-        </div>
-        <div className="stat-card">
+        </motion.div>
+        <motion.div className="stat-card" variants={statsCardVariants}>
           <div className="stat-icon-wrapper green">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
           </div>
@@ -346,8 +391,8 @@ function AnalyticsPage({ habits }) {
             <span className="stat-value">{avgCompletion}%</span>
             <span className="stat-title">Avg Rate</span>
           </div>
-        </div>
-        <div className="stat-card">
+        </motion.div>
+        <motion.div className="stat-card" variants={statsCardVariants}>
           <div className="stat-icon-wrapper orange">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
           </div>
@@ -355,8 +400,8 @@ function AnalyticsPage({ habits }) {
             <span className="stat-value">{longestStreak} Days</span>
             <span className="stat-title">Longest Streak</span>
           </div>
-        </div>
-        <div className="stat-card">
+        </motion.div>
+        <motion.div className="stat-card" variants={statsCardVariants}>
           <div className="stat-icon-wrapper purple">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
           </div>
@@ -364,8 +409,8 @@ function AnalyticsPage({ habits }) {
             <span className="stat-value">{bestMonth}</span>
             <span className="stat-title">Best Month</span>
           </div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       {/* 2. Middle Grid: Monthly Chart + Top Habits */}
       <div className="analytics-bottom-grid">
@@ -386,7 +431,12 @@ function AnalyticsPage({ habits }) {
                   <span>{habit.percentage}%</span>
                 </div>
                 <div className="rank-bar-bg">
-                  <div className="rank-bar-fill" style={{ width: `${habit.percentage}%` }}></div>
+                  <motion.div
+                    className="rank-bar-fill"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${habit.percentage}%` }}
+                    transition={{ duration: 0.8, ease: "easeOut", delay: 0.1 }}
+                  />
                 </div>
               </div>
             ))
@@ -404,7 +454,7 @@ function AnalyticsPage({ habits }) {
         </div>
       </div>
 
-    </div>
+    </motion.div>
   );
 }
 
@@ -443,7 +493,12 @@ const OverallProgressCard = ({ habits, viewYear, viewMonth }) => {
                 <span>{percent}%</span>
               </div>
               <div className="progress-track">
-                <div className="progress-fill" style={{ width: `${percent}%` }}></div>
+                <motion.div
+                  className="progress-fill"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${percent}%` }}
+                  transition={{ duration: 0.8, ease: "easeOut" }}
+                />
               </div>
               <span className="progress-subtext">{doneCount} of {totalDays} days</span>
             </div>
@@ -480,24 +535,29 @@ const StatsFooter = ({ habits }) => {
   const activeDays = Object.keys(dayCounts).length;
 
   return (
-    <div className="stats-footer-grid">
-      <div className="stat-card blue">
+    <motion.div
+      className="stats-footer-grid"
+      variants={statsContainerVariants}
+      initial="hidden"
+      animate="visible"
+    >
+      <motion.div className="stat-card blue" variants={statsCardVariants}>
         <div className="stat-value">{totalCompleted}</div>
         <div className="stat-title">Total Completed</div>
-      </div>
-      <div className="stat-card green">
+      </motion.div>
+      <motion.div className="stat-card green" variants={statsCardVariants}>
         <div className="stat-value">{avgRate}%</div>
         <div className="stat-title">Average Rate</div>
-      </div>
-      <div className="stat-card purple">
+      </motion.div>
+      <motion.div className="stat-card purple" variants={statsCardVariants}>
         <div className="stat-value">{bestDayCount}</div>
         <div className="stat-title">Best Day</div>
-      </div>
-      <div className="stat-card orange">
+      </motion.div>
+      <motion.div className="stat-card orange" variants={statsCardVariants}>
         <div className="stat-value">{activeDays}</div>
         <div className="stat-title">Active Days</div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
 
@@ -605,7 +665,12 @@ function HabitsPage({ habits, onToggle, onAdd }) {
   };
 
   return (
-    <>
+    <motion.div
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+    >
       <div className="page-header">
         <h1>Habit Tracker</h1>
         <p className="page-subtitle">Track your daily habits and build consistency</p>
@@ -615,7 +680,7 @@ function HabitsPage({ habits, onToggle, onAdd }) {
       <div className="dashboard-top-grid">
 
         {/* LEFT: Calendar Table Card */}
-        <div className="card-container" style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+        <div className="card-container" style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)' }}>
 
           <div className="tracker-controls" style={{ padding: 0, boxShadow: 'none', border: 'none', marginBottom: '1.5rem' }}>
             <div className="month-selector" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -710,90 +775,35 @@ function HabitsPage({ habits, onToggle, onAdd }) {
       <StatsFooter habits={habits} />
 
       {/* ADD HABIT MODAL */}
-      {isModalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <h2 className="modal-title">Add New Habit</h2>
-            <input
-              type="text"
-              className="modal-input"
-              placeholder="Ex: Read Book..."
-              value={newHabitName}
-              onChange={(e) => setNewHabitName(e.target.value)}
-              autoFocus
-              onKeyPress={(e) => e.key === 'Enter' && handleAddClick()}
-            />
-            <div className="modal-actions">
-              <button
-                className="btn-secondary"
-                onClick={() => setIsModalOpen(false)}
-                style={{
-                  backgroundColor: '#f1f5f9',
-                  border: '1px solid #cbd5e1',
-                  color: '#475569'
-                }}
-              >
-                Cancel
-              </button>
-              <button className="btn-primary" onClick={handleAddClick}>Add Habit</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* EDIT HABIT MODAL */}
-      {editModalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h2 className="modal-title" style={{ margin: 0 }}>Edit Habit</h2>
-              <button
-                onClick={handleCloseEdit}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem' }}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
-            </div>
-            <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '1.5rem' }}>Make changes to your habit here.</p>
-
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.5rem', fontSize: '0.9rem' }}>Name</label>
+      <AnimatePresence>
+        {isModalOpen && (
+          <motion.div
+            className="modal-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="modal-content"
+              variants={modalVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+            >
+              <h2 className="modal-title">Add New Habit</h2>
               <input
                 type="text"
                 className="modal-input"
-                value={editHabitName}
-                onChange={(e) => setEditHabitName(e.target.value)}
+                placeholder="Ex: Read Book..."
+                value={newHabitName}
+                onChange={(e) => setNewHabitName(e.target.value)}
                 autoFocus
-                onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit()}
+                onKeyPress={(e) => e.key === 'Enter' && handleAddClick()}
               />
-            </div>
-
-            <div className="modal-actions" style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <button
-                className="btn-secondary"
-                onClick={handleDeleteHabit}
-                style={{
-                  backgroundColor: '#fee2e2',
-                  color: '#dc2626',
-                  borderColor: '#dc2626',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                </svg>
-                Delete
-              </button>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <div className="modal-actions">
                 <button
                   className="btn-secondary"
-                  onClick={handleCloseEdit}
+                  onClick={() => setIsModalOpen(false)}
                   style={{
                     backgroundColor: '#f1f5f9',
                     border: '1px solid #cbd5e1',
@@ -802,13 +812,93 @@ function HabitsPage({ habits, onToggle, onAdd }) {
                 >
                   Cancel
                 </button>
-                <button className="btn-primary" onClick={handleSaveEdit}>Save Changes</button>
+                <button className="btn-primary" onClick={handleAddClick}>Add Habit</button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* EDIT HABIT MODAL */}
+      <AnimatePresence>
+        {editModalOpen && (
+          <motion.div
+            className="modal-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="modal-content"
+              variants={modalVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h2 className="modal-title" style={{ margin: 0 }}>Edit Habit</h2>
+                <button
+                  onClick={handleCloseEdit}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.5rem' }}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              </div>
+              <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '1.5rem' }}>Make changes to your habit here.</p>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.5rem', fontSize: '0.9rem' }}>Name</label>
+                <input
+                  type="text"
+                  className="modal-input"
+                  value={editHabitName}
+                  onChange={(e) => setEditHabitName(e.target.value)}
+                  autoFocus
+                  onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit()}
+                />
+              </div>
+
+              <div className="modal-actions" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <button
+                  className="btn-secondary"
+                  onClick={handleDeleteHabit}
+                  style={{
+                    backgroundColor: '#fee2e2',
+                    color: '#dc2626',
+                    borderColor: '#dc2626',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  </svg>
+                  Delete
+                </button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    className="btn-secondary"
+                    onClick={handleCloseEdit}
+                    style={{
+                      backgroundColor: '#f1f5f9',
+                      border: '1px solid #cbd5e1',
+                      color: '#475569'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button className="btn-primary" onClick={handleSaveEdit}>Save Changes</button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -1432,9 +1522,14 @@ const Journal = ({ journalEntries }) => {
         </button>
       </div>
 
-      <div className="journal-stats-dashboard">
+      <motion.div
+        className="journal-stats-dashboard"
+        variants={statsContainerVariants}
+        initial="hidden"
+        animate="visible"
+      >
         {stats.map((stat, idx) => (
-          <div key={idx} className="journal-stat-card">
+          <motion.div key={idx} className="journal-stat-card" variants={statsCardVariants}>
             <div className="journal-stat-icon" style={{ color: stat.color }}>
               {stat.icon}
             </div>
@@ -1442,15 +1537,11 @@ const Journal = ({ journalEntries }) => {
               <span className="journal-stat-label">{stat.label}</span>
               <span className="journal-stat-value">{stat.value}</span>
             </div>
-          </div>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
 
       <div className="view-controls-row">
-        <div className="view-label">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-          Calendar
-        </div>
         <div className="calendar-nav">
           <button className="nav-arrow-btn" onClick={handlePrevMonth}>‹</button>
           <div className="nav-date-group">
@@ -1466,7 +1557,12 @@ const Journal = ({ journalEntries }) => {
           {weekdays.map(w => <div key={w} className="weekday-label">{w}</div>)}
         </div>
 
-        <div className="calendar-grid">
+        <motion.div
+          className="calendar-grid"
+          variants={statsContainerVariants}
+          initial="hidden"
+          animate="visible"
+        >
           {allCells.map((item, idx) => {
             if (!item) return <div key={`empty-${idx}`} className="day-cell empty"></div>;
 
@@ -1503,16 +1599,31 @@ const Journal = ({ journalEntries }) => {
             );
 
             if (isFuture) {
-              return <div key={item.dayNum} className={cellClass}>{Content}</div>;
+              return (
+                <motion.div
+                  key={item.dayNum}
+                  className={cellClass}
+                  variants={statsCardVariants}
+                >
+                  {Content}
+                </motion.div>
+              );
             }
 
             return (
-              <Link to={`/journal/${item.dateKey}`} key={item.dayNum} className={cellClass}>
-                {Content}
-              </Link>
+              <motion.div
+                key={item.dayNum}
+                variants={statsCardVariants}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Link to={`/journal/${item.dateKey}`} className={cellClass}>
+                  {Content}
+                </Link>
+              </motion.div>
             );
           })}
-        </div>
+        </motion.div>
       </div>
     </div>
   );
@@ -1561,6 +1672,7 @@ const AppWrapper = () => {
 
 function App() {
   const { currentUser, logout, loading: authLoading } = useAuth();
+  const location = useLocation();
 
   // State for toasts
   const [toasts, setToasts] = useState([]);
@@ -1580,6 +1692,9 @@ function App() {
   // Account popup and modal states
   const [isAccountPopupOpen, setIsAccountPopupOpen] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [additionalEmails, setAdditionalEmails] = useState([]);
+  const [isAddingEmail, setIsAddingEmail] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
   const accountPopupRef = useRef(null);
 
 
@@ -1721,6 +1836,24 @@ function App() {
   // Save Journal Entry Handler
   const saveJournalEntry = async (date, data) => {
     await firestoreService.saveJournalEntryInFirestore(currentUser.uid, date, data);
+  };
+
+  // Account Modal Handlers
+  const handleAddEmail = () => {
+    if (newEmail.trim() && !additionalEmails.find(e => e.email === newEmail.trim())) {
+      setAdditionalEmails([...additionalEmails, { email: newEmail.trim(), verified: false }]);
+      setNewEmail('');
+      setIsAddingEmail(false);
+    }
+  };
+
+  const handleRemoveEmail = (email) => {
+    setAdditionalEmails(additionalEmails.filter(e => e.email !== email));
+  };
+
+  const handleCancelAddEmail = () => {
+    setNewEmail('');
+    setIsAddingEmail(false);
   };
 
 
@@ -1882,17 +2015,19 @@ function App() {
 
                 <main className="main-content">
                   <div className="content-wrapper">
-                    <Routes>
-                      <Route path="/" element={<HabitsPage habits={habits} onToggle={toggleHabit} onAdd={addHabit} />} />
-                      <Route path="/journal" element={<Journal journalEntries={journalEntries} />} />
-                      <Route
-                        path="/journal/:date"
-                        element={<JournalEntry journalEntries={journalEntries} onSave={saveJournalEntry} />}
-                      />
-                      <Route path="/analytics" element={<AnalyticsPage habits={habits} />} />
-                      <Route path="/settings" element={<Settings settings={settings} onSettingsChange={setSettings} habits={habits} />} />
-                      <Route path="*" element={<Navigate to="/" replace />} />
-                    </Routes>
+                    <AnimatePresence mode="wait">
+                      <Routes location={location} key={location.pathname}>
+                        <Route path="/" element={<HabitsPage habits={habits} onToggle={toggleHabit} onAdd={addHabit} />} />
+                        <Route path="/journal" element={<Journal journalEntries={journalEntries} />} />
+                        <Route
+                          path="/journal/:date"
+                          element={<JournalEntry journalEntries={journalEntries} onSave={saveJournalEntry} />}
+                        />
+                        <Route path="/analytics" element={<AnalyticsPage habits={habits} />} />
+                        <Route path="/settings" element={<Settings settings={settings} onSettingsChange={setSettings} habits={habits} />} />
+                        <Route path="*" element={<Navigate to="/" replace />} />
+                      </Routes>
+                    </AnimatePresence>
                   </div>
                 </main>
               </div>
