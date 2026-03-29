@@ -3,7 +3,7 @@ import './App.css';
 import './Settings.css';
 import './Toast.css';
 import { BrowserRouter as Router, Routes, Route, Link, NavLink, useParams, useNavigate, Navigate, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { exportToPDF } from './exportPDF';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -35,24 +35,74 @@ ChartJS.register(
 );
 
 
+// --- SHARED SVG ICONS (hoisted outside components) ---
+const EditIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+);
+const TrendIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+);
+const BoltIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+);
+const CalendarIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+);
+
+// --- SCROLL-TRIGGERED ANIMATION HOOK ---
+// eslint-disable-next-line no-unused-vars
+const useInView = (options = {}) => {
+  const ref = useRef(null);
+  const [inView, setInView] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setInView(true);
+          observer.unobserve(el);
+        }
+      },
+      { threshold: options.threshold || 0.1, rootMargin: options.rootMargin || '0px 0px -40px 0px' }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [options.threshold, options.rootMargin]);
+
+  return [ref, inView];
+};
+
 // --- FRAMER MOTION ANIMATION VARIANTS ---
 const pageVariants = {
-  initial: { opacity: 0, y: 20 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.3 } },
-  exit: { opacity: 0, y: -20, transition: { duration: 0.2 } }
+  initial: { opacity: 0, y: 24, scale: 0.98 },
+  animate: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 300, damping: 30, mass: 0.8 } },
+  exit: { opacity: 0, y: -16, scale: 0.98, transition: { duration: 0.2, ease: 'easeIn' } }
+};
+
+// eslint-disable-next-line no-unused-vars
+const modalOverlayVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.2 } },
+  exit: { opacity: 0, transition: { duration: 0.15 } }
 };
 
 const modalVariants = {
-  hidden: { opacity: 0, scale: 0.95 },
+  hidden: { opacity: 0, scale: 0.92, y: 20 },
   visible: {
     opacity: 1,
     scale: 1,
-    transition: { type: 'spring', duration: 0.3, bounce: 0.3 }
+    y: 0,
+    transition: { type: 'spring', stiffness: 400, damping: 28, mass: 0.8 }
   },
   exit: {
     opacity: 0,
     scale: 0.95,
-    transition: { duration: 0.2 }
+    y: 10,
+    transition: { duration: 0.15, ease: 'easeIn' }
   }
 };
 
@@ -60,13 +110,47 @@ const statsContainerVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
-    transition: { staggerChildren: 0.1 }
+    transition: { staggerChildren: 0.08, delayChildren: 0.1 }
   }
 };
 
 const statsCardVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0 }
+  hidden: { opacity: 0, y: 16, scale: 0.96 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { type: 'spring', stiffness: 350, damping: 25 }
+  }
+};
+
+// eslint-disable-next-line no-unused-vars
+const listItemVariants = {
+  hidden: { opacity: 0, x: -12, scale: 0.97 },
+  visible: {
+    opacity: 1,
+    x: 0,
+    scale: 1,
+    transition: { type: 'spring', stiffness: 350, damping: 28 }
+  }
+};
+
+// eslint-disable-next-line no-unused-vars
+const listItemContainerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.05, delayChildren: 0.05 }
+  }
+};
+
+const fadeUpVariants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { type: 'spring', stiffness: 300, damping: 30 }
+  }
 };
 
 
@@ -358,7 +442,7 @@ function AnalyticsPage({ habits }) {
   };
 
   return (
-    <motion.div
+    <Motion.div
       variants={pageVariants}
       initial="initial"
       animate="animate"
@@ -368,49 +452,49 @@ function AnalyticsPage({ habits }) {
 
       {/* 1. Metrics Grid */}
       {/* 1. Metrics Grid */}
-      <motion.div
+      <Motion.div
         className="stats-grid"
         variants={statsContainerVariants}
         initial="hidden"
         animate="visible"
       >
-        <motion.div className="stat-card" variants={statsCardVariants}>
+        <Motion.div className="stat-card" variants={statsCardVariants} whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }}>
           <div className="stat-icon-wrapper blue">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+            <EditIcon />
           </div>
           <div className="stat-info">
             <span className="stat-value">{activeHabits}</span>
             <span className="stat-title">Active Habits</span>
           </div>
-        </motion.div>
-        <motion.div className="stat-card" variants={statsCardVariants}>
+        </Motion.div>
+        <Motion.div className="stat-card" variants={statsCardVariants} whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }}>
           <div className="stat-icon-wrapper green">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+            <TrendIcon />
           </div>
           <div className="stat-info">
             <span className="stat-value">{avgCompletion}%</span>
             <span className="stat-title">Avg Rate</span>
           </div>
-        </motion.div>
-        <motion.div className="stat-card" variants={statsCardVariants}>
+        </Motion.div>
+        <Motion.div className="stat-card" variants={statsCardVariants} whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }}>
           <div className="stat-icon-wrapper orange">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+            <BoltIcon />
           </div>
           <div className="stat-info">
             <span className="stat-value">{longestStreak} Days</span>
             <span className="stat-title">Longest Streak</span>
           </div>
-        </motion.div>
-        <motion.div className="stat-card" variants={statsCardVariants}>
+        </Motion.div>
+        <Motion.div className="stat-card" variants={statsCardVariants} whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }}>
           <div className="stat-icon-wrapper purple">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            <CalendarIcon />
           </div>
           <div className="stat-info">
             <span className="stat-value">{bestMonth}</span>
             <span className="stat-title">Best Month</span>
           </div>
-        </motion.div>
-      </motion.div>
+        </Motion.div>
+      </Motion.div>
 
       {/* 2. Middle Grid: Monthly Chart + Top Habits */}
       <div className="analytics-bottom-grid">
@@ -431,7 +515,7 @@ function AnalyticsPage({ habits }) {
                   <span>{habit.percentage}%</span>
                 </div>
                 <div className="rank-bar-bg">
-                  <motion.div
+                  <Motion.div
                     className="rank-bar-fill"
                     initial={{ width: 0 }}
                     animate={{ width: `${habit.percentage}%` }}
@@ -454,7 +538,7 @@ function AnalyticsPage({ habits }) {
         </div>
       </div>
 
-    </motion.div>
+    </Motion.div>
   );
 }
 
@@ -493,7 +577,7 @@ const OverallProgressCard = ({ habits, viewYear, viewMonth }) => {
                 <span>{percent}%</span>
               </div>
               <div className="progress-track">
-                <motion.div
+                <Motion.div
                   className="progress-fill"
                   initial={{ width: 0 }}
                   animate={{ width: `${percent}%` }}
@@ -535,29 +619,29 @@ const StatsFooter = ({ habits }) => {
   const activeDays = Object.keys(dayCounts).length;
 
   return (
-    <motion.div
+    <Motion.div
       className="stats-footer-grid"
       variants={statsContainerVariants}
       initial="hidden"
       animate="visible"
     >
-      <motion.div className="stat-card blue" variants={statsCardVariants}>
+      <Motion.div className="stat-card blue" variants={statsCardVariants} whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }}>
         <div className="stat-value">{totalCompleted}</div>
         <div className="stat-title">Total Completed</div>
-      </motion.div>
-      <motion.div className="stat-card green" variants={statsCardVariants}>
+      </Motion.div>
+      <Motion.div className="stat-card green" variants={statsCardVariants} whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }}>
         <div className="stat-value">{avgRate}%</div>
         <div className="stat-title">Average Rate</div>
-      </motion.div>
-      <motion.div className="stat-card purple" variants={statsCardVariants}>
+      </Motion.div>
+      <Motion.div className="stat-card purple" variants={statsCardVariants} whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }}>
         <div className="stat-value">{bestDayCount}</div>
         <div className="stat-title">Best Day</div>
-      </motion.div>
-      <motion.div className="stat-card orange" variants={statsCardVariants}>
+      </Motion.div>
+      <Motion.div className="stat-card orange" variants={statsCardVariants} whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }}>
         <div className="stat-value">{activeDays}</div>
         <div className="stat-title">Active Days</div>
-      </motion.div>
-    </motion.div>
+      </Motion.div>
+    </Motion.div>
   );
 };
 
@@ -665,7 +749,7 @@ function HabitsPage({ habits, onToggle, onAdd }) {
   };
 
   return (
-    <motion.div
+    <Motion.div
       variants={pageVariants}
       initial="initial"
       animate="animate"
@@ -777,13 +861,13 @@ function HabitsPage({ habits, onToggle, onAdd }) {
       {/* ADD HABIT MODAL */}
       <AnimatePresence>
         {isModalOpen && (
-          <motion.div
+          <Motion.div
             className="modal-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <motion.div
+            <Motion.div
               className="modal-content"
               variants={modalVariants}
               initial="hidden"
@@ -814,20 +898,20 @@ function HabitsPage({ habits, onToggle, onAdd }) {
                 </button>
                 <button className="btn-primary" onClick={handleAddClick}>Add Habit</button>
               </div>
-            </motion.div>
-          </motion.div>
+            </Motion.div>
+          </Motion.div>
         )}
       </AnimatePresence>
       {/* EDIT HABIT MODAL */}
       <AnimatePresence>
         {editModalOpen && (
-          <motion.div
+          <Motion.div
             className="modal-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <motion.div
+            <Motion.div
               className="modal-content"
               variants={modalVariants}
               initial="hidden"
@@ -894,11 +978,11 @@ function HabitsPage({ habits, onToggle, onAdd }) {
                   <button className="btn-primary" onClick={handleSaveEdit}>Save Changes</button>
                 </div>
               </div>
-            </motion.div>
-          </motion.div>
+            </Motion.div>
+          </Motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </Motion.div>
   );
 }
 
@@ -939,9 +1023,8 @@ const Settings = ({ settings, onSettingsChange, habits }) => {
   const handleExport = () => {
     try {
       exportToPDF(habits, setSaveStatus);
-    } catch (error) {
-      // Error already shown via setSaveStatus
-      setSaveStatus('Export failed: ' + error.message);
+    } catch {
+      setSaveStatus('Export failed. Please try again.');
     }
   };
 
@@ -968,7 +1051,7 @@ const Settings = ({ settings, onSettingsChange, habits }) => {
         setSaveStatus('All data deleted successfully! ✓');
         setDeleteConfirm(0);
         setTimeout(() => setSaveStatus(''), 3000);
-      } catch (error) {
+      } catch {
         // Error already shown via toast notification
         setSaveStatus('Failed to delete data. Please try again.');
         setDeleteConfirm(0);
@@ -978,6 +1061,12 @@ const Settings = ({ settings, onSettingsChange, habits }) => {
   };
 
   return (
+    <Motion.div
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+    >
     <div className="settings-page">
       <header className="settings-header">
         <h1>Settings</h1>
@@ -985,7 +1074,13 @@ const Settings = ({ settings, onSettingsChange, habits }) => {
       </header>
 
       {/* 1. Profile Information */}
-      <section className="settings-card">
+      <Motion.section
+        className="settings-card"
+        variants={fadeUpVariants}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, amount: 0.1 }}
+      >
         <h3 className="settings-section-title">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
           Profile Information
@@ -1014,10 +1109,16 @@ const Settings = ({ settings, onSettingsChange, habits }) => {
             />
           </div>
         </div>
-      </section>
+      </Motion.section>
 
       {/* 2. Notifications */}
-      <section className="settings-card">
+      <Motion.section
+        className="settings-card"
+        variants={fadeUpVariants}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, amount: 0.1 }}
+      >
         <h3 className="settings-section-title">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
           Notifications
@@ -1064,10 +1165,16 @@ const Settings = ({ settings, onSettingsChange, habits }) => {
             <button className="btn-primary" onClick={handleRequestNotificationPermission}>Enable</button>
           </div>
         )}
-      </section>
+      </Motion.section>
 
       {/* 3. Data Management */}
-      <section className="settings-card">
+      <Motion.section
+        className="settings-card"
+        variants={fadeUpVariants}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, amount: 0.1 }}
+      >
         <h3 className="settings-section-title">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
           Data Management
@@ -1108,7 +1215,7 @@ const Settings = ({ settings, onSettingsChange, habits }) => {
             {deleteConfirm === 2 && 'Final Confirmation'}
           </button>
         </div>
-      </section>
+      </Motion.section>
 
       <footer className="settings-footer">
         <button className="btn-primary" onClick={handleSave}>
@@ -1116,6 +1223,7 @@ const Settings = ({ settings, onSettingsChange, habits }) => {
         </button>
       </footer>
     </div>
+    </Motion.div>
   );
 };
 
@@ -1128,23 +1236,17 @@ const JournalEntry = ({ journalEntries, onSave }) => {
     mood: '', gratitude: '', highlights: '', challenges: '', learning: '', goals: '', notes: ''
   }), []);
 
-  const [entry, setEntry] = useState(defaultEntry);
+  const [entry, setEntry] = useState(() => journalEntries[date] || defaultEntry);
   const [saveStatus, setSaveStatus] = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  // FIX: Data sync karnyasathi Effect - directly handle state updates
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+  // Sync entry when date or journalEntries change
+  const syncKey = date + JSON.stringify(journalEntries[date]);
   useEffect(() => {
-    const entryToSet = journalEntries[date] || defaultEntry;
-    setEntry(entryToSet);
-    // Ethun setSaveStatus('') kadhun takla ahe
-  }, [date, journalEntries, defaultEntry]);
-
-  // FIX: New Effect - Fakt Date badalyavar status clear kar
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => {
+    setEntry(journalEntries[date] || defaultEntry);
     setSaveStatus('');
-  }, [date]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncKey]);
 
   const moodOptions = ['😊', '😐', '😔', '😡', '🤩', '😴'];
 
@@ -1163,7 +1265,7 @@ const JournalEntry = ({ journalEntries, onSave }) => {
       setTimeout(() => {
         navigate('/journal');
       }, 1500);
-    } catch (error) {
+    } catch {
       // Error already shown via setSaveStatus
       setSaveStatus('Failed to save. Please try again.');
     }
@@ -1184,6 +1286,12 @@ const JournalEntry = ({ journalEntries, onSave }) => {
   };
 
   return (
+    <Motion.div
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+    >
     <div className="journal-editor-container">
       <div className="editor-top-nav">
         <Link to="/journal" className="back-btn-secondary">
@@ -1359,6 +1467,7 @@ const JournalEntry = ({ journalEntries, onSave }) => {
         </div>
       </div>
     </div>
+    </Motion.div>
   );
 };
 
@@ -1500,6 +1609,12 @@ const Journal = ({ journalEntries }) => {
   ];
 
   return (
+    <Motion.div
+      variants={pageVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+    >
     <div className="journal-page">
       <div className="journal-page-header">
         <div className="journal-title-group">
@@ -1522,14 +1637,14 @@ const Journal = ({ journalEntries }) => {
         </button>
       </div>
 
-      <motion.div
+      <Motion.div
         className="journal-stats-dashboard"
         variants={statsContainerVariants}
         initial="hidden"
         animate="visible"
       >
         {stats.map((stat, idx) => (
-          <motion.div key={idx} className="journal-stat-card" variants={statsCardVariants}>
+          <Motion.div key={idx} className="journal-stat-card" variants={statsCardVariants} whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }}>
             <div className="journal-stat-icon" style={{ color: stat.color }}>
               {stat.icon}
             </div>
@@ -1537,9 +1652,9 @@ const Journal = ({ journalEntries }) => {
               <span className="journal-stat-label">{stat.label}</span>
               <span className="journal-stat-value">{stat.value}</span>
             </div>
-          </motion.div>
+          </Motion.div>
         ))}
-      </motion.div>
+      </Motion.div>
 
       <div className="view-controls-row">
         <div className="calendar-nav">
@@ -1557,7 +1672,7 @@ const Journal = ({ journalEntries }) => {
           {weekdays.map(w => <div key={w} className="weekday-label">{w}</div>)}
         </div>
 
-        <motion.div
+        <Motion.div
           className="calendar-grid"
           variants={statsContainerVariants}
           initial="hidden"
@@ -1600,18 +1715,18 @@ const Journal = ({ journalEntries }) => {
 
             if (isFuture) {
               return (
-                <motion.div
+                <Motion.div
                   key={item.dayNum}
                   className={cellClass}
                   variants={statsCardVariants}
                 >
                   {Content}
-                </motion.div>
+                </Motion.div>
               );
             }
 
             return (
-              <motion.div
+              <Motion.div
                 key={item.dayNum}
                 variants={statsCardVariants}
                 whileHover={{ scale: 1.05 }}
@@ -1620,12 +1735,13 @@ const Journal = ({ journalEntries }) => {
                 <Link to={`/journal/${item.dateKey}`} className={cellClass}>
                   {Content}
                 </Link>
-              </motion.div>
+              </Motion.div>
             );
           })}
-        </motion.div>
+        </Motion.div>
       </div>
     </div>
+    </Motion.div>
   );
 };
 
@@ -1680,13 +1796,35 @@ function App() {
   // State for data
   const [habits, setHabits] = useState([]);
   const [journalEntries, setJournalEntries] = useState({});
-  const [settings, setSettings] = useState({
-    dailyReminders: true,
-    weeklyReport: true,
-    achievementNotifications: true,
-    startOfWeek: 'Monday',
-    timezone: 'IST',
-    theme: 'Light'
+  const [settings, setSettings] = useState(() => {
+    if (!currentUser) return {
+      dailyReminders: true,
+      weeklyReport: true,
+      achievementNotifications: true,
+      startOfWeek: 'Monday',
+      timezone: 'IST',
+      theme: 'Light'
+    };
+    try {
+      const saved = localStorage.getItem(`habitTrackerSettings_${currentUser.uid}`);
+      return saved ? JSON.parse(saved) : {
+        dailyReminders: true,
+        weeklyReport: true,
+        achievementNotifications: true,
+        startOfWeek: 'Monday',
+        timezone: 'IST',
+        theme: 'Light'
+      };
+    } catch {
+      return {
+        dailyReminders: true,
+        weeklyReport: true,
+        achievementNotifications: true,
+        startOfWeek: 'Monday',
+        timezone: 'IST',
+        theme: 'Light'
+      };
+    }
   });
 
   // Account popup and modal states
@@ -1799,20 +1937,19 @@ function App() {
 
     // If currently checked, delete the entry; if unchecked, set to true
     if (newLogs[dateKey]) {
-      delete newLogs[dateKey]; // Remove the key entirely when unchecking
+      delete newLogs[dateKey];
     } else {
-      newLogs[dateKey] = true; // Add the key when checking
+      newLogs[dateKey] = true;
     }
 
-    // OPTIMISTIC UPDATE: Update UI immediately for instant feedback
-    const updatedHabits = habits.map(h =>
+    // OPTIMISTIC UPDATE: functional setState for stable callback
+    setHabits(prev => prev.map(h =>
       h.id === habitId ? { ...h, logs: newLogs } : h
-    );
-    setHabits(updatedHabits);
+    ));
 
     // Firestore update in background (no await to prevent UI blocking)
     firestoreService.updateHabitLogsInFirestore(currentUser.uid, habitId, newLogs)
-      .catch(error => {
+      .catch(() => {
         // Rollback on error
         setHabits(habits);
         showToast('Error', 'Failed to update habit. Please try again.', 'error');
@@ -1820,6 +1957,9 @@ function App() {
 
     // Achievement checks (only when checking, not unchecking)
     if (newLogs[dateKey]) {
+      const updatedHabits = habits.map(h =>
+        h.id === habitId ? { ...h, logs: newLogs } : h
+      );
       checkAndNotifyAchievements(updatedHabits, settings, dateKey);
     }
   };
