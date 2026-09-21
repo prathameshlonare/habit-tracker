@@ -1,26 +1,32 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import './App.css';
-import './Settings.css';
-import './Toast.css';
-import { BrowserRouter as Router, Routes, Route, Link, NavLink, useParams, useNavigate, Navigate, useLocation } from 'react-router-dom';
+import './styles/App.css';
+import './styles/Settings.css';
+import './styles/Toast.css';
+import MobileBottomNav from './components/MobileBottomNav';
+import MobileDailyView from './components/MobileDailyView';
+import JournalCalendar from './components/JournalCalendar';
+import { useIsMobile } from './hooks/useIsMobile';
+
+import { HashRouter as Router, Routes, Route, Link, NavLink, useParams, useNavigate, Navigate } from 'react-router-dom';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
-import { exportToPDF } from './exportPDF';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import ProtectedRoute from './components/ProtectedRoute';
-import Login from './components/Login';
-import * as firestoreService from './services/firestoreService';
+import { exportToPDF } from './services/exportPDF';
+import * as dbService from './services/dbService';
+import * as reminders from './services/reminders';
+import * as backHandler from './services/backHandler';
+import { Capacitor } from '@capacitor/core';
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
   PointElement,
   LineElement,
-  BarElement, // Import BarElement
+  BarElement,
+  Filler,
   Title,
   Tooltip,
   Legend,
 } from 'chart.js';
-import { Line, Bar } from 'react-chartjs-2'; // Import Bar
+import { Line, Bar } from 'react-chartjs-2';
 
 // Register ChartJS Components
 ChartJS.register(
@@ -28,12 +34,12 @@ ChartJS.register(
   LinearScale,
   PointElement,
   LineElement,
-  BarElement, // Register BarElement
+  BarElement,
+  Filler,
   Title,
   Tooltip,
   Legend
 );
-
 
 // --- SHARED SVG ICONS (hoisted outside components) ---
 const EditIcon = () => (
@@ -49,45 +55,16 @@ const CalendarIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
 );
 
-// --- SCROLL-TRIGGERED ANIMATION HOOK ---
-// eslint-disable-next-line no-unused-vars
-const useInView = (options = {}) => {
-  const ref = useRef(null);
-  const [inView, setInView] = useState(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setInView(true);
-          observer.unobserve(el);
-        }
-      },
-      { threshold: options.threshold || 0.1, rootMargin: options.rootMargin || '0px 0px -40px 0px' }
-    );
-
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [options.threshold, options.rootMargin]);
-
-  return [ref, inView];
-};
-
-// --- FRAMER MOTION ANIMATION VARIANTS ---
 const pageVariants = {
   initial: { opacity: 0, y: 24, scale: 0.98 },
   animate: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 300, damping: 30, mass: 0.8 } },
   exit: { opacity: 0, y: -16, scale: 0.98, transition: { duration: 0.2, ease: 'easeIn' } }
 };
 
-// eslint-disable-next-line no-unused-vars
-const modalOverlayVariants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { duration: 0.2 } },
-  exit: { opacity: 0, transition: { duration: 0.15 } }
+const mobilePageVariants = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1, transition: { duration: 0.15, ease: 'easeOut' } },
+  exit: { opacity: 0, transition: { duration: 0.12, ease: 'easeIn' } }
 };
 
 const modalVariants = {
@@ -124,26 +101,6 @@ const statsCardVariants = {
   }
 };
 
-// eslint-disable-next-line no-unused-vars
-const listItemVariants = {
-  hidden: { opacity: 0, x: -12, scale: 0.97 },
-  visible: {
-    opacity: 1,
-    x: 0,
-    scale: 1,
-    transition: { type: 'spring', stiffness: 350, damping: 28 }
-  }
-};
-
-// eslint-disable-next-line no-unused-vars
-const listItemContainerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.05, delayChildren: 0.05 }
-  }
-};
-
 const fadeUpVariants = {
   hidden: { opacity: 0, y: 12 },
   visible: {
@@ -171,13 +128,16 @@ const setToastCallback = (callback) => {
   addToastCallback = callback;
 };
 
-const showToast = (title, message, type = 'default') => {
+const showToast = (title, message, type = 'default', options = {}) => {
   if (addToastCallback) {
     addToastCallback({
       id: ++toastIdCounter,
       title,
       message,
-      type
+      type,
+      action: options.action,
+      group: options.group,
+      durationMs: options.durationMs,
     });
   }
 };
@@ -185,20 +145,31 @@ const showToast = (title, message, type = 'default') => {
 
 // --- NOTIFICATION HELPERS ---
 const requestNotificationPermission = async () => {
-  if ('Notification' in window && Notification.permission === 'default') {
-    const permission = await Notification.requestPermission();
-    return permission === 'granted';
+  try {
+    if (typeof window !== 'undefined' && 'Notification' in window && window.Notification) {
+      if (Notification.permission === 'default') {
+        const permission = await Notification.requestPermission();
+        return permission === 'granted';
+      }
+      return Notification.permission === 'granted';
+    }
+  } catch (err) {
+    console.warn('Notification permission error:', err);
   }
-  return Notification.permission === 'granted';
+  return false;
 };
 
 const showNotification = (title, options = {}) => {
-  if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification(title, {
-      icon: '/favicon.ico',
-      badge: '/favicon.ico',
-      ...options
-    });
+  try {
+    if (typeof window !== 'undefined' && 'Notification' in window && window.Notification && Notification.permission === 'granted') {
+      new Notification(title, {
+        icon: '/favicon.ico',
+        badge: '/favicon.ico',
+        ...options
+      });
+    }
+  } catch (err) {
+    console.warn('Notification error:', err);
   }
 };
 
@@ -210,12 +181,21 @@ const checkAndNotifyAchievements = (habits, settings, dateKey) => {
   const today = new Date();
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-  // Only show "All Habits Completed" notification if completing TODAY's habits
+  // Only show "All Habits Completed" notification if completing TODAY's habits.
+  // Web gets the in-app toast; native gets the system notification instead.
   if (dateKey === todayKey && habits.length > 0) {
     const allCompleted = habits.every(habit => habit.logs[todayKey]);
 
     if (allCompleted) {
-      showToast('🎉 All Habits Completed!', 'Amazing work! You completed all your habits today!', 'achievement');
+      if (Capacitor.isNativePlatform()) {
+        void reminders.notifyAchievement(
+          'All habits completed!',
+          'Amazing work! You completed all your habits today!',
+          settings
+        );
+      } else {
+        showToast('All habits completed!', 'Amazing work! You completed all your habits today!', 'achievement');
+      }
     }
   }
 
@@ -243,10 +223,11 @@ const checkAndNotifyAchievements = (habits, settings, dateKey) => {
       // Notify on milestone streaks (3, 7, 14, 30 days)
       const milestones = [3, 7, 14, 30];
       if (milestones.includes(currentStreak)) {
-        showNotification(`🔥 ${currentStreak}-Day Streak!`, {
-          body: `Keep up the great work with "${habit.name}"!`,
-          tag: `streak-${habit.id}`
-        });
+        void reminders.notifyAchievement(
+          `${currentStreak}-Day Streak!`,
+          `Keep up the great work with "${habit.name}"!`,
+          settings
+        );
       }
     });
   }
@@ -254,6 +235,8 @@ const checkAndNotifyAchievements = (habits, settings, dateKey) => {
 
 // --- COMPONENT: ANALYTICS PAGE (Full Features) ---
 function AnalyticsPage({ habits }) {
+  const isMobile = useIsMobile();
+  const [showAllHabits, setShowAllHabits] = useState(false);
 
   // // A. Dynamic Date Setup
   // const today = new Date();
@@ -440,6 +423,96 @@ function AnalyticsPage({ habits }) {
       intersect: false,
     },
   };
+
+  // Phone variant: 2 hero numbers + one short chart + top 3 with expander.
+  // Desktop keeps the full 4 cards, both charts, and the full ranked list.
+  if (isMobile) {
+    const t = new Date();
+    const tKey = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+    const doneToday = habits.filter((h) => h.logs && h.logs[tKey]).length;
+    const todayRate = habits.length > 0 ? Math.round((doneToday / habits.length) * 100) : 0;
+    const mobileLabels = last90Days.slice(-30).map((d) => d.label);
+    const mobileActivity = {
+      labels: mobileLabels,
+      datasets: [{ ...activityData.datasets[0], data: activityValues.slice(-30) }],
+    };
+    const visibleHabits = showAllHabits ? rankedHabits : rankedHabits.slice(0, 3);
+
+    return (
+      <Motion.div
+        variants={mobilePageVariants}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+      >
+        <h1 style={{ marginBottom: '1.5rem' }}>Analytics</h1>
+
+        <div className="stats-grid">
+          <div className="stat-card">
+            <div className="stat-icon-wrapper green">
+              <TrendIcon />
+            </div>
+            <div className="stat-info">
+              <span className="stat-value">{todayRate}%</span>
+              <span className="stat-title">Today</span>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon-wrapper orange">
+              <BoltIcon />
+            </div>
+            <div className="stat-info">
+              <span className="stat-value">{longestStreak} Days</span>
+              <span className="stat-title">Best Streak</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="activity-section">
+          <h3 className="activity-header">Last 30 Days</h3>
+          <div style={{ height: '220px' }}>
+            <Line options={activityOptions} data={mobileActivity} />
+          </div>
+        </div>
+
+        <div className="top-habits-card" style={{ marginTop: '1.5rem' }}>
+          <h3 style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', fontWeight: 600 }}>Top Performing</h3>
+          {rankedHabits.length > 0 ? (
+            <>
+              {visibleHabits.map(habit => (
+                <div key={habit.id} className="habit-rank-item">
+                  <div className="rank-header">
+                    <span>{habit.name}</span>
+                    <span>{habit.percentage}%</span>
+                  </div>
+                  <div className="rank-bar-bg">
+                    <Motion.div
+                      className="rank-bar-fill"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${habit.percentage}%` }}
+                      transition={{ duration: 0.8, ease: "easeOut", delay: 0.1 }}
+                    />
+                  </div>
+                </div>
+              ))}
+              {rankedHabits.length > 3 && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ width: '100%', marginTop: '0.5rem' }}
+                  onClick={() => setShowAllHabits((v) => !v)}
+                >
+                  {showAllHabits ? 'Show less' : `Show all ${rankedHabits.length}`}
+                </button>
+              )}
+            </>
+          ) : (
+            <p style={{ color: '#666' }}>No habits added yet.</p>
+          )}
+        </div>
+      </Motion.div>
+    );
+  }
 
   return (
     <Motion.div
@@ -647,9 +720,27 @@ const StatsFooter = ({ habits }) => {
 
 // --- COMPONENT: HABITS PAGE (Refactored) ---
 function HabitsPage({ habits, onToggle, onAdd }) {
-  const { currentUser } = useAuth();
+  const isMobile = useIsMobile();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newHabitName, setNewHabitName] = useState("");
+  // Phone sheets swipe down to dismiss; desktop keeps the centered dialog.
+  const sheetDrag = (onClose) =>
+    isMobile
+      ? {
+          drag: 'y',
+          dragConstraints: { top: 0, bottom: 0 },
+          dragElastic: { top: 0, bottom: 0.6 },
+          onDragEnd: (_, info) => {
+            if (info.offset.y > 120 || info.velocity.y > 500) onClose();
+          },
+        }
+      : {};
+
+  // Pass 5: system back button closes sheets first. Opening a sheet arms one
+  // history entry; popping it closes the sheet instead of navigating. Closing
+  // any other way (button, swipe, save) consumes the entry via history.back()
+  // so no dead entry is left behind. Covers every close path with no
+  // call-site changes. (Effects live below the edit-modal state they read.)
 
   // Month navigation state
   const [viewDate, setViewDate] = useState(new Date());
@@ -712,6 +803,64 @@ function HabitsPage({ habits, onToggle, onAdd }) {
   const [editingHabit, setEditingHabit] = useState(null);
   const [editHabitName, setEditHabitName] = useState('');
 
+  // Back-button effects (placed after the state they read — the dep arrays
+  // evaluate during render, so they must not sit above these declarations).
+  // Web keeps the history-entry trick; native uses the central sheet registry
+  // owned by the Capacitor backButton listener (gesture back included).
+  const sheetEntryPushed = useRef(false);
+  const closedByPop = useRef(false);
+  const isNativeSheet = Capacitor.isNativePlatform();
+
+  useEffect(() => {
+    if (isNativeSheet) return;
+    const anyOpen = isModalOpen || editModalOpen;
+    if (anyOpen && !sheetEntryPushed.current) {
+      sheetEntryPushed.current = true;
+      window.history.pushState({ habitSheet: true }, '');
+    } else if (!anyOpen && sheetEntryPushed.current && !closedByPop.current) {
+      sheetEntryPushed.current = false;
+      window.history.back();
+    }
+    closedByPop.current = false;
+  }, [isModalOpen, editModalOpen, isNativeSheet]);
+
+  useEffect(() => {
+    if (isNativeSheet) return;
+    const onPop = () => {
+      if (!sheetEntryPushed.current) return;
+      if (isModalOpen || editModalOpen) {
+        closedByPop.current = true;
+        sheetEntryPushed.current = false;
+        setIsModalOpen(false);
+        setEditModalOpen(false);
+        setEditingHabit(null);
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [isModalOpen, editModalOpen, isNativeSheet]);
+
+  useEffect(() => {
+    if (!isNativeSheet) return;
+    if (editModalOpen) {
+      backHandler.pushSheet('edit-habit', () => {
+        setEditModalOpen(false);
+        setEditingHabit(null);
+      });
+    } else {
+      backHandler.removeSheet('edit-habit');
+    }
+    if (isModalOpen && !editModalOpen) {
+      backHandler.pushSheet('add-habit', () => setIsModalOpen(false));
+    } else {
+      backHandler.removeSheet('add-habit');
+    }
+    return () => {
+      backHandler.removeSheet('edit-habit');
+      backHandler.removeSheet('add-habit');
+    };
+  }, [isModalOpen, editModalOpen, isNativeSheet]);
+
   const handleAddClick = () => {
     if (newHabitName.trim()) {
       onAdd(newHabitName.trim());
@@ -728,7 +877,7 @@ function HabitsPage({ habits, onToggle, onAdd }) {
 
   const handleSaveEdit = async () => {
     if (editHabitName.trim() && editingHabit) {
-      await firestoreService.updateHabitNameInFirestore(currentUser.uid, editingHabit.id, editHabitName.trim());
+      await dbService.updateHabitNameInFirestore(null, editingHabit.id, editHabitName.trim());
       setEditModalOpen(false);
       setEditingHabit(null);
     }
@@ -736,7 +885,7 @@ function HabitsPage({ habits, onToggle, onAdd }) {
 
   const handleDeleteHabit = async () => {
     if (editingHabit && window.confirm(`Are you sure you want to delete "${editingHabit.name}"?`)) {
-      await firestoreService.deleteHabitFromFirestore(currentUser.uid, editingHabit.id);
+      await dbService.deleteHabitFromFirestore(null, editingHabit.id);
       setEditModalOpen(false);
       setEditingHabit(null);
     }
@@ -750,113 +899,130 @@ function HabitsPage({ habits, onToggle, onAdd }) {
 
   return (
     <Motion.div
-      variants={pageVariants}
+      variants={isMobile ? mobilePageVariants : pageVariants}
       initial="initial"
       animate="animate"
       exit="exit"
     >
-      <div className="page-header">
-        <h1>Habit Tracker</h1>
-        <p className="page-subtitle">Track your daily habits and build consistency</p>
-      </div>
+      {!isMobile && (
+        <div className="page-header">
+          <h1>Habit Tracker</h1>
+          <p className="page-subtitle">Track your daily habits and build consistency</p>
+        </div>
+      )}
 
+      {isMobile ? (
+        <MobileDailyView habits={habits} onToggle={onToggle} onEdit={handleEditClick} onAdd={onAdd} />
+      ) : (
+      <>
       {/* TOP GRID: Table + Overall Progress */}
       <div className="dashboard-top-grid">
 
         {/* LEFT: Calendar Table Card */}
         <div className="card-container" style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)' }}>
 
-          <div className="tracker-controls" style={{ padding: 0, boxShadow: 'none', border: 'none', marginBottom: '1.5rem' }}>
-            <div className="month-selector" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <button
-                className="icon-btn"
-                onClick={handlePrevMonth}
-                style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '0.5rem 0.75rem', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1e293b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="15 18 9 12 15 6"></polyline>
-                </svg>
-              </button>
-              <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>{monthName}</span>
-              <button
-                className="icon-btn"
-                onClick={handleNextMonth}
-                style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '0.5rem 0.75rem', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1e293b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="9 18 15 12 9 6"></polyline>
-                </svg>
-              </button>
-            </div>
-            <button className="btn-add-habit" onClick={() => setIsModalOpen(true)}>+ Add Habit</button>
-          </div>
+              <div className="tracker-controls" style={{ padding: 0, boxShadow: 'none', border: 'none', marginBottom: '1.5rem' }}>
+                <div className="month-selector" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <button
+                    className="icon-btn"
+                    onClick={handlePrevMonth}
+                    style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '0.5rem 0.75rem', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1e293b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                  </button>
+                  <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>{monthName}</span>
+                  <button
+                    className="icon-btn"
+                    onClick={handleNextMonth}
+                    style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '0.5rem 0.75rem', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1e293b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                  </button>
+                </div>
+                <button className="btn-add-habit" onClick={() => setIsModalOpen(true)}>+ Add Habit</button>
+              </div>
 
-          <div className="table-wrapper">
-            <table className="habit-table">
-              <thead>
-                <tr>
-                  <th className="habit-col">Habit</th>
-                  {daysArray.map((d) => <th key={d} className="day-col" style={{ minWidth: '30px', color: '#64748b' }}>{d}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {habits.length === 0 ? (
-                  <tr>
-                    <td colSpan={32} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
-                      Start by adding a new habit!
-                    </td>
-                  </tr>
-                ) : (
-                  habits.map(habit => (
-                    <tr key={habit.id}>
-                      <td
-                        className="habit-col habit-name-cell"
-                        onClick={() => handleEditClick(habit)}
-                        style={{
-                          cursor: 'pointer'
-                        }}
-                        title="Click to edit"
-                      >
-                        <span>📝</span> {habit.name}
-                      </td>
-                      {daysArray.map((d) => {
-                        const dateKey = getViewDateKey(d);
-                        return (
-                          <td key={d} className="day-col">
-                            <input
-                              type="checkbox"
-                              className="habit-checkbox"
-                              checked={!!habit.logs[dateKey]}
-                              onChange={() => onToggle(habit.id, dateKey)}
-                            />
-                          </td>
-                        );
-                      })}
+              <div className="table-wrapper">
+                <table className="habit-table">
+                  <thead>
+                    <tr>
+                      <th className="habit-col">Habit</th>
+                      {daysArray.map((d) => <th key={d} className="day-col" style={{ minWidth: '30px', color: '#64748b' }}>{d}</th>)}
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {habits.length === 0 ? (
+                      <tr>
+                        <td colSpan={daysInMonth + 1} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
+                          Start by adding a new habit!
+                        </td>
+                      </tr>
+                    ) : (
+                      habits.map(habit => (
+                        <tr key={habit.id}>
+                          <td
+                            className="habit-col habit-name-cell"
+                            onClick={() => handleEditClick(habit)}
+                            style={{
+                              cursor: 'pointer'
+                            }}
+                            title="Click to edit"
+                          >
+                            <span>📝</span> {habit.name}
+                          </td>
+                          {daysArray.map((d) => {
+                            const dateKey = getViewDateKey(d);
+                            return (
+                              <td key={d} className="day-col">
+                                <input
+                                  type="checkbox"
+                                  className="habit-checkbox"
+                                  checked={!!habit.logs[dateKey]}
+                                  onChange={() => onToggle(habit.id, dateKey)}
+                                />
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* RIGHT: Overall Progress */}
+            <OverallProgressCard habits={habits} viewYear={viewYear} viewMonth={viewMonth} />
           </div>
-        </div>
 
-        {/* RIGHT: Overall Progress */}
-        <OverallProgressCard habits={habits} viewYear={viewYear} viewMonth={viewMonth} />
-      </div>
+          {/* MIDDLE: Daily Progress Chart */}
+          <div className="chart-section" style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', position: 'relative' }}>
+            <h3 style={{ margin: '0 0 0.5rem 0', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              📊 Daily Progress
+            </h3>
+            <p style={{ margin: '0 0 1.5rem 0', color: '#64748b', fontSize: '0.9rem' }}>Track how many habits you complete each day this month</p>
+            <div style={{ height: '300px', position: 'relative' }}>
+              <Line options={options} data={data} />
+            </div>
+          </div>
 
-      {/* MIDDLE: Daily Progress Chart */}
-      <div className="chart-section" style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <h3 style={{ margin: '0 0 0.5rem 0', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          📊 Daily Progress
-        </h3>
-        <p style={{ margin: '0 0 1.5rem 0', color: '#64748b', fontSize: '0.9rem' }}>Track how many habits you complete each day this month</p>
-        <div style={{ height: '300px' }}>
-          <Line options={options} data={data} />
-        </div>
-      </div>
+          {/* BOTTOM: Stats Footer */}
+          <StatsFooter habits={habits} />
+      </>
+      )}
 
-      {/* BOTTOM: Stats Footer */}
-      <StatsFooter habits={habits} />
+          {/* Floating Action Button for easy habit creation on mobile */}
+          <button
+            className="fab-add-button mobile-only"
+            onClick={() => setIsModalOpen(true)}
+            aria-label="Add new habit"
+          >
+            +
+          </button>
 
       {/* ADD HABIT MODAL */}
       <AnimatePresence>
@@ -873,7 +1039,9 @@ function HabitsPage({ habits, onToggle, onAdd }) {
               initial="hidden"
               animate="visible"
               exit="exit"
+              {...sheetDrag(() => setIsModalOpen(false))}
             >
+              <div className="sheet-handle mobile-only" aria-hidden="true" />
               <h2 className="modal-title">Add New Habit</h2>
               <input
                 type="text"
@@ -882,7 +1050,7 @@ function HabitsPage({ habits, onToggle, onAdd }) {
                 value={newHabitName}
                 onChange={(e) => setNewHabitName(e.target.value)}
                 autoFocus
-                onKeyPress={(e) => e.key === 'Enter' && handleAddClick()}
+                onKeyDown={(e) => e.key === "Enter" && handleAddClick()}
               />
               <div className="modal-actions">
                 <button
@@ -917,7 +1085,9 @@ function HabitsPage({ habits, onToggle, onAdd }) {
               initial="hidden"
               animate="visible"
               exit="exit"
+              {...sheetDrag(handleCloseEdit)}
             >
+              <div className="sheet-handle mobile-only" aria-hidden="true" />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                 <h2 className="modal-title" style={{ margin: 0 }}>Edit Habit</h2>
                 <button
@@ -940,7 +1110,7 @@ function HabitsPage({ habits, onToggle, onAdd }) {
                   value={editHabitName}
                   onChange={(e) => setEditHabitName(e.target.value)}
                   autoFocus
-                  onKeyPress={(e) => e.key === 'Enter' && handleSaveEdit()}
+                  onKeyDown={(e) => e.key === "Enter" && handleSaveEdit()}
                 />
               </div>
 
@@ -989,23 +1159,45 @@ function HabitsPage({ habits, onToggle, onAdd }) {
 
 // --- COMPONENT: SETTINGS PAGE ---
 const Settings = ({ settings, onSettingsChange, habits }) => {
-  const { currentUser } = useAuth();
   const [saveStatus, setSaveStatus] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(0);
 
-  // Check notification permission status
-  const [notificationPermission, setNotificationPermission] = useState(
-    'Notification' in window ? Notification.permission : 'unsupported'
-  );
+  // Check notification permission status safely
+  const [notificationPermission, setNotificationPermission] = useState(() => {
+    try {
+      return (typeof window !== 'undefined' && 'Notification' in window && window.Notification) ? Notification.permission : 'unsupported';
+    } catch {
+      return 'unsupported';
+    }
+  });
+
+  useEffect(() => {
+    if (!reminders.isNative()) return;
+    reminders.permissionState().then(setNotificationPermission).catch(() => {});
+  }, []);
 
   const handleRequestNotificationPermission = async () => {
-    if ('Notification' in window) {
-      const permission = await Notification.requestPermission();
-      setNotificationPermission(permission);
-      if (permission === 'granted') {
-        setSaveStatus('Notifications enabled! ✓');
-        setTimeout(() => setSaveStatus(''), 3000);
+    try {
+      if (reminders.isNative()) {
+        const granted = await reminders.ensurePermissions();
+        setNotificationPermission(granted ? 'granted' : 'denied');
+        if (granted) {
+          await reminders.scheduleDaily(settings);
+          setSaveStatus('Notifications enabled! ✓');
+          setTimeout(() => setSaveStatus(''), 3000);
+        }
+        return;
       }
+      if (typeof window !== 'undefined' && 'Notification' in window && window.Notification) {
+        const permission = await Notification.requestPermission();
+        setNotificationPermission(permission);
+        if (permission === 'granted') {
+          setSaveStatus('Notifications enabled! ✓');
+          setTimeout(() => setSaveStatus(''), 3000);
+        }
+      }
+    } catch (err) {
+      console.warn('Notification request error:', err);
     }
   };
 
@@ -1020,11 +1212,20 @@ const Settings = ({ settings, onSettingsChange, habits }) => {
     setTimeout(() => setSaveStatus(''), 3000);
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
+    showToast('Generating report', 'Your PDF is being prepared…', 'default');
     try {
-      exportToPDF(habits, setSaveStatus);
+      const filename = await exportToPDF(habits);
+      const done = Capacitor.isNativePlatform()
+        ? 'Pick where it goes in the share sheet.'
+        : 'Check your downloads folder.';
+      showToast('Report ready', `${filename}. ${done}`, 'achievement');
+      setSaveStatus('Report ready! ✓');
+      setTimeout(() => setSaveStatus(''), 3000);
     } catch {
+      showToast('Export failed', 'Please try again.', 'error');
       setSaveStatus('Export failed. Please try again.');
+      setTimeout(() => setSaveStatus(''), 3000);
     }
   };
 
@@ -1047,7 +1248,7 @@ const Settings = ({ settings, onSettingsChange, habits }) => {
     if (deleteConfirm === 2) {
       try {
         setSaveStatus('Deleting all data...');
-        await firestoreService.deleteAllUserDataFromFirestore(currentUser.uid);
+        await dbService.deleteAllUserDataFromFirestore(null);
         setSaveStatus('All data deleted successfully! ✓');
         setDeleteConfirm(0);
         setTimeout(() => setSaveStatus(''), 3000);
@@ -1070,48 +1271,10 @@ const Settings = ({ settings, onSettingsChange, habits }) => {
     <div className="settings-page">
       <header className="settings-header">
         <h1>Settings</h1>
-        <p className="settings-subtitle">Manage your account and application preferences</p>
+        <p className="settings-subtitle">Manage your application preferences</p>
       </header>
 
-      {/* 1. Profile Information */}
-      <Motion.section
-        className="settings-card"
-        variants={fadeUpVariants}
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, amount: 0.1 }}
-      >
-        <h3 className="settings-section-title">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-          Profile Information
-        </h3>
-        <span className="settings-section-subtitle">Your account information from Google</span>
-
-        <div className="settings-grid">
-          <div className="settings-group">
-            <label className="settings-label">Full Name</label>
-            <input
-              type="text"
-              className="settings-input"
-              value={currentUser?.displayName || ''}
-              readOnly
-              style={{ backgroundColor: '#f1f5f9', color: '#64748b', cursor: 'not-allowed' }}
-            />
-          </div>
-          <div className="settings-group">
-            <label className="settings-label">Email Address</label>
-            <input
-              type="email"
-              className="settings-input"
-              value={currentUser?.email || ''}
-              readOnly
-              style={{ backgroundColor: '#f1f5f9', color: '#64748b', cursor: 'not-allowed' }}
-            />
-          </div>
-        </div>
-      </Motion.section>
-
-      {/* 2. Notifications */}
+      {/* 1. Notifications */}
       <Motion.section
         className="settings-card"
         variants={fadeUpVariants}
@@ -1156,7 +1319,9 @@ const Settings = ({ settings, onSettingsChange, habits }) => {
             borderRadius: '8px',
             display: 'flex',
             justifyContent: 'space-between',
-            alignItems: 'center'
+            alignItems: 'center',
+            gap: '1rem',
+            flexWrap: 'wrap'
           }}>
             <div>
               <div style={{ fontWeight: 600, color: '#d97706' }}>🔔 Enable Notifications</div>
@@ -1248,7 +1413,16 @@ const JournalEntry = ({ journalEntries, onSave }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncKey]);
 
-  const moodOptions = ['😊', '😐', '😔', '😡', '🤩', '😴'];
+  // Mood faces are entry content (stored in the journal), each gets a text label
+  // so the picker is never an icon-only control.
+  const moodOptions = [
+    { face: '😊', label: 'Good' },
+    { face: '😐', label: 'Okay' },
+    { face: '😔', label: 'Low' },
+    { face: '😡', label: 'Angry' },
+    { face: '🤩', label: 'Amazing' },
+    { face: '😴', label: 'Tired' },
+  ];
 
   const handleChange = (field, value) => {
     setEntry({ ...entry, [field]: value });
@@ -1338,13 +1512,16 @@ const JournalEntry = ({ journalEntries, onSave }) => {
           <section className="editor-section full-width">
             <h3 className="section-title">How are you feeling today?</h3>
             <div className="mood-selection-grid">
-              {moodOptions.map((emoji) => (
+              {moodOptions.map((m) => (
                 <button
-                  key={emoji}
-                  className={`mood-picker-item ${entry.mood === emoji ? 'active' : ''}`}
-                  onClick={() => handleChange('mood', emoji)}
+                  key={m.label}
+                  type="button"
+                  aria-pressed={entry.mood === m.face}
+                  className={`mood-picker-item ${entry.mood === m.face ? 'active' : ''}`}
+                  onClick={() => handleChange('mood', m.face)}
                 >
-                  <span className="mood-emoji">{emoji}</span>
+                  <span className="mood-emoji" aria-hidden="true">{m.face}</span>
+                  <span className="mood-label">{m.label}</span>
                 </button>
               ))}
             </div>
@@ -1466,6 +1643,21 @@ const JournalEntry = ({ journalEntries, onSave }) => {
           </section>
         </div>
       </div>
+
+      {/* Phone-only sticky action bar: Save stays under the thumb while writing.
+          Same handlers as the header buttons, which hide on phone via CSS. */}
+      <div className="editor-stickybar mobile-only">
+        <button
+          type="button"
+          className={showClearConfirm ? "btn-danger" : "btn-secondary"}
+          onClick={handleClear}
+        >
+          {showClearConfirm ? 'Confirm?' : 'Clear'}
+        </button>
+        <button type="button" className="btn-primary" onClick={handleSave}>
+          {saveStatus ? 'Saved' : 'Save Entry'}
+        </button>
+      </div>
     </div>
     </Motion.div>
   );
@@ -1486,21 +1678,14 @@ const Journal = ({ journalEntries }) => {
   const handlePrevMonth = () => setViewDate(new Date(viewYear, viewMonth - 1, 1));
   const handleNextMonth = () => setViewDate(new Date(viewYear, viewMonth + 1, 1));
   const handleGoToToday = () => setViewDate(new Date(realToday.getFullYear(), realToday.getMonth(), 1));
+  const goToTodayEntry = () => {
+    const todayKey = `${realToday.getFullYear()}-${String(realToday.getMonth() + 1).padStart(2, '0')}-${String(realToday.getDate()).padStart(2, '0')}`;
+    navigate(`/journal/${todayKey}`);
+  };
 
 
-  // Calculate Grid
-  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-  const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
-
-  const blanks = Array.from({ length: firstDayOfWeek }, () => null);
-  const monthDays = Array.from({ length: daysInMonth }, (_, i) => {
-    const dayNum = i + 1;
-    const dateKey = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-    return { dayNum, dateKey };
-  });
-
-  const allCells = [...blanks, ...monthDays];
-  const weekdays = ["S", "M", "T", "W", "T", "F", "S"];
+  // Grid rendering is owned by JournalCalendar (DayPicker). viewDate stays here
+  // because the month nav row and the stats below both read it.
 
   // Stats Logic (Simplified)
   const entriesCount = Object.keys(journalEntries).length;
@@ -1622,12 +1807,9 @@ const Journal = ({ journalEntries }) => {
           <p className="journal-subtitle">Reflect on your journey, one day at a time</p>
         </div>
         <button
-          className="btn-primary"
+          className="btn-primary desktop-only"
           style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-          onClick={() => {
-            const todayKey = `${realToday.getFullYear()}-${String(realToday.getMonth() + 1).padStart(2, '0')}-${String(realToday.getDate()).padStart(2, '0')}`;
-            navigate(`/journal/${todayKey}`);
-          }}
+          onClick={goToTodayEntry}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -1636,6 +1818,15 @@ const Journal = ({ journalEntries }) => {
           New Entry
         </button>
       </div>
+
+      {/* Phone: same FAB pattern as Habits — one primary action, thumb reach */}
+      <button
+        className="fab-add-button mobile-only"
+        onClick={goToTodayEntry}
+        aria-label="New journal entry"
+      >
+        +
+      </button>
 
       <Motion.div
         className="journal-stats-dashboard"
@@ -1668,77 +1859,7 @@ const Journal = ({ journalEntries }) => {
       </div>
 
       <div className="calendar-container">
-        <div className="weekday-header">
-          {weekdays.map(w => <div key={w} className="weekday-label">{w}</div>)}
-        </div>
-
-        <Motion.div
-          className="calendar-grid"
-          variants={statsContainerVariants}
-          initial="hidden"
-          animate="visible"
-        >
-          {allCells.map((item, idx) => {
-            if (!item) return <div key={`empty-${idx}`} className="day-cell empty"></div>;
-
-            const cellDate = new Date(viewYear, viewMonth, item.dayNum);
-            cellDate.setHours(0, 0, 0, 0);
-
-            const compToday = new Date();
-            compToday.setHours(0, 0, 0, 0);
-
-            const isToday = cellDate.getTime() === compToday.getTime();
-            const isFuture = cellDate > compToday;
-            const isPast = cellDate < compToday;
-            const hasEntry = !!journalEntries[item.dateKey];
-
-            let cellClass = "day-cell";
-            if (isToday) cellClass += " today";
-            else if (isFuture) cellClass += " disabled";
-            else if (isPast) cellClass += " past";
-            if (hasEntry) cellClass += " has-entry";
-
-            const entry = journalEntries[item.dateKey];
-            const Content = (
-              <>
-                <span className="day-number">{item.dayNum}</span>
-                {entry && (
-                  <div className="day-entry-preview">
-                    {entry.mood && <span className="day-mood">{entry.mood}</span>}
-                    <div className="day-entry-text">
-                      {entry.highlights || entry.gratitude || entry.notes || "Entry recorded"}
-                    </div>
-                  </div>
-                )}
-              </>
-            );
-
-            if (isFuture) {
-              return (
-                <Motion.div
-                  key={item.dayNum}
-                  className={cellClass}
-                  variants={statsCardVariants}
-                >
-                  {Content}
-                </Motion.div>
-              );
-            }
-
-            return (
-              <Motion.div
-                key={item.dayNum}
-                variants={statsCardVariants}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <Link to={`/journal/${item.dateKey}`} className={cellClass}>
-                  {Content}
-                </Link>
-              </Motion.div>
-            );
-          })}
-        </Motion.div>
+        <JournalCalendar journalEntries={journalEntries} month={viewDate} onMonthChange={setViewDate} />
       </div>
     </div>
     </Motion.div>
@@ -1747,28 +1868,163 @@ const Journal = ({ journalEntries }) => {
 
 
 // --- TOAST COMPONENT ---
-const ToastContainer = ({ toasts, onRemove }) => {
+// Status is carried by one tonal tile with a drawn glyph (same 2px-stroke
+// family as the nav and habit tiles) — never emoji, never a side border.
+// Toasts auto-dismiss after 4s, so there is no close button.
+const TOAST_TONES = {
+  achievement: { bg: '#fef3c7', fg: '#b45309' },
+  streak: { bg: '#ffedd5', fg: '#c2410c' },
+  success: { bg: '#dcfce7', fg: '#15803d' },
+  error: { bg: '#fee2e2', fg: '#dc2626' },
+  default: { bg: '#f1f5f9', fg: '#475569' },
+};
+
+const ToastGlyph = ({ type }) => {
+  const p = {
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+  };
+  switch (type) {
+    case 'achievement':
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" {...p} aria-hidden="true">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+        </svg>
+      );
+    case 'streak':
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" {...p} aria-hidden="true">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+        </svg>
+      );
+    case 'error':
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" {...p} aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+      );
+    case 'default':
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" {...p} aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <line x1="12" y1="16" x2="12" y2="12" />
+          <line x1="12" y1="8" x2="12.01" y2="8" />
+        </svg>
+      );
+    case 'success':
+    default:
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" {...p} aria-hidden="true">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      );
+  }
+};
+
+const SWIPE_DISMISS_PX = 90;
+
+// One toast: follows the finger while swiped, flies out past the threshold,
+// snaps back otherwise. Reduced-motion users get instant dismiss.
+const SwipeableToast = ({ toast, onDismiss }) => {
+  const [offset, setOffset] = useState(0);
+  const [exiting, setExiting] = useState(null);
+  const drag = useRef(null);
+
+  const dismiss = (dir) => {
+    const reduce =
+      typeof window !== 'undefined' &&
+      window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) {
+      onDismiss(toast.id);
+      return;
+    }
+    setExiting(dir);
+    setTimeout(() => onDismiss(toast.id), 180);
+  };
+
+  const onPointerDown = (e) => {
+    if (exiting) return;
+    // Taps on the action button belong to the button, not the swipe.
+    if (e.target.closest && e.target.closest('.toast-action')) return;
+    drag.current = { startX: e.clientX, pointerId: e.pointerId };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const onPointerMove = (e) => {
+    const d = drag.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    setOffset(e.clientX - d.startX);
+  };
+
+  const endDrag = (e) => {
+    const d = drag.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    drag.current = null;
+    const dx = e.clientX - d.startX;
+    if (Math.abs(dx) > SWIPE_DISMISS_PX) {
+      dismiss(dx > 0 ? 'right' : 'left');
+    } else {
+      setOffset(0);
+    }
+  };
+
+  const cancelDrag = () => {
+    drag.current = null;
+    setOffset(0);
+  };
+
+  const tone = TOAST_TONES[toast.type] || TOAST_TONES.default;
   return (
-    <div className="toast-container">
+    <div
+      className={`toast${exiting ? ` toast-exiting-${exiting}` : ''}`}
+      style={
+        exiting || offset === 0
+          ? undefined
+          : {
+              transform: `translateX(${offset}px)`,
+              opacity: Math.max(0.35, 1 - Math.abs(offset) / 320),
+              transition: 'none',
+            }
+      }
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={cancelDrag}
+    >
+      <span className="toast-tile" style={{ backgroundColor: tone.bg, color: tone.fg }} aria-hidden="true">
+        <ToastGlyph type={toast.type} />
+      </span>
+      <div className="toast-content">
+        <div className="toast-title">{toast.title}</div>
+        <div className="toast-message">{toast.message}</div>
+      </div>
+      {toast.action && (
+        <button
+          type="button"
+          className="toast-action"
+          onClick={() => {
+            toast.action.onClick();
+            onDismiss(toast.id);
+          }}
+        >
+          {toast.action.label}
+        </button>
+      )}
+    </div>
+  );
+};
+
+const ToastContainer = ({ toasts, onDismiss }) => {
+  return (
+    <div className="toast-container" aria-live="polite">
       {toasts.map(toast => (
-        <div key={toast.id} className={`toast ${toast.type}`}>
-          <div className="toast-icon">
-            {toast.type === 'achievement' && '🎉'}
-            {toast.type === 'streak' && '🔥'}
-            {toast.type === 'success' && '✓'}
-            {toast.type === 'default' && '📝'}
-          </div>
-          <div className="toast-content">
-            <div className="toast-title">{toast.title}</div>
-            <div className="toast-message">{toast.message}</div>
-          </div>
-          <button className="toast-close" onClick={() => onRemove(toast.id)}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
+        <SwipeableToast key={toast.id} toast={toast} onDismiss={onDismiss} />
       ))}
     </div>
   );
@@ -1776,37 +2032,28 @@ const ToastContainer = ({ toasts, onRemove }) => {
 
 // --- MAIN APP COMPONENT ---
 
-const AppWrapper = () => {
-  return (
-    <AuthProvider>
-      <Router>
-        <App />
-      </Router>
-    </AuthProvider>
-  );
-};
+const AppWrapper = () => { return (<Router><App /></Router>); };
+
+const BootSkeleton = () => (
+  <div aria-label="Loading" role="status">
+    <div className="skeleton skeleton-text" style={{ width: '40%' }} />
+    <div className="skeleton skeleton-text short" />
+    <div className="skeleton skeleton-card" style={{ marginTop: '1rem' }} />
+    <div className="skeleton skeleton-card" style={{ marginTop: '1rem' }} />
+  </div>
+);
 
 function App() {
-  const { currentUser, logout, loading: authLoading } = useAuth();
-  const location = useLocation();
-
   // State for toasts
   const [toasts, setToasts] = useState([]);
 
   // State for data
   const [habits, setHabits] = useState([]);
   const [journalEntries, setJournalEntries] = useState({});
+  const [booted, setBooted] = useState(() => !Capacitor.isNativePlatform());
   const [settings, setSettings] = useState(() => {
-    if (!currentUser) return {
-      dailyReminders: true,
-      weeklyReport: true,
-      achievementNotifications: true,
-      startOfWeek: 'Monday',
-      timezone: 'IST',
-      theme: 'Light'
-    };
     try {
-      const saved = localStorage.getItem(`habitTrackerSettings_${currentUser.uid}`);
+      const saved = localStorage.getItem('habitTrackerSettings_local');
       return saved ? JSON.parse(saved) : {
         dailyReminders: true,
         weeklyReport: true,
@@ -1827,27 +2074,15 @@ function App() {
     }
   });
 
-  // Account popup and modal states
-  const [isAccountPopupOpen, setIsAccountPopupOpen] = useState(false);
-  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
-  const [additionalEmails, setAdditionalEmails] = useState([]);
-  const [isAddingEmail, setIsAddingEmail] = useState(false);
-  const [newEmail, setNewEmail] = useState('');
-  const accountPopupRef = useRef(null);
-
-
-
-  // 1. Listen for Firestore Data
+  // 1. Listen for Local / Offline Data (Run once on mount)
   useEffect(() => {
-    if (!currentUser) return;
-
     // Subscribe to Habits
-    const unsubscribeHabits = firestoreService.subscribeToHabits(currentUser.uid, (data) => {
+    const unsubscribeHabits = dbService.subscribeToHabits(null, (data) => {
       setHabits(data);
     });
 
     // Subscribe to Journal
-    const unsubscribeJournal = firestoreService.subscribeToJournal(currentUser.uid, (data) => {
+    const unsubscribeJournal = dbService.subscribeToJournal(null, (data) => {
       setJournalEntries(data);
     });
 
@@ -1855,51 +2090,72 @@ function App() {
       unsubscribeHabits();
       unsubscribeJournal();
     };
-  }, [currentUser]);
+  }, []);
 
-  // Toast callback setup
+  // Boot gate (native only): storage init + first snapshot before content,
+  // then dark status icons for the white topbar and manual splash hide.
+  // Web skips the gate entirely — behavior there is unchanged.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await dbService.initStorage();
+        if (cancelled) return;
+        setSettings(dbService.getSettings());
+      } finally {
+        if (!cancelled) setBooted(true);
+      }
+      if (cancelled) return;
+      await backHandler.initBackHandler();
+      const { StatusBar, Style } = await import('@capacitor/status-bar');
+      const { SplashScreen } = await import('@capacitor/splash-screen');
+      await StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {});
+      await StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
+      await SplashScreen.hide().catch(() => {});
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Toast callback setup (auto-dismiss after 4s, snackbar behavior).
+  // Toasts sharing a `group` replace each other (e.g. rapid habit toggles
+  // keep one Undo toast); `durationMs` overrides the 4s default.
   useEffect(() => {
     setToastCallback((toast) => {
-      setToasts((prev) => [...prev, toast]);
+      setToasts((prev) => {
+        const withoutGroup = toast.group
+          ? prev.filter((t) => t.group !== toast.group)
+          : prev;
+        return [...withoutGroup, toast];
+      });
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== toast.id));
+      }, toast.durationMs || 4000);
     });
   }, []);
 
-  // Click outside handler for account popup
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (accountPopupRef.current && !accountPopupRef.current.contains(event.target)) {
-        setIsAccountPopupOpen(false);
-      }
-    };
-
-    if (isAccountPopupOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isAccountPopupOpen]);
-
-  const removeToast = (id) => {
+  const dismissToast = (id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Persistence Effect for Settings (user-scoped)
+  // Persistence Effect for Settings (repo fans out to SQLite on native)
   useEffect(() => {
-    if (!currentUser) return;
-    const settingsKey = `habitTrackerSettings_${currentUser.uid}`;
-    localStorage.setItem(settingsKey, JSON.stringify(settings));
-  }, [settings, currentUser]);
+    dbService.saveSettings(settings);
+  }, [settings]);
 
-  // Data cleanup is handled automatically by Firestore subscription unsubscribe (lines 1613-1616)
-  // No manual clearing needed - prevents data loss during auth initialization
-
-  // Notification Effects
+  // Native daily alarms follow the settings toggle
   useEffect(() => {
-    // Request permission if any notification is enabled
-    if (settings.dailyReminders || settings.achievementNotifications || settings.weeklyReports) {
-      requestNotificationPermission();
+    if (!Capacitor.isNativePlatform()) return;
+    void reminders.scheduleDaily(settings);
+  }, [settings.dailyReminders]);
+
+  // Notification Effects (web only — native uses scheduled local notifications)
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) return;
+    if (typeof window === 'undefined' || !('Notification' in window) || !window.Notification) {
+      return;
     }
 
     // Daily reminder check (runs every hour)
@@ -1926,7 +2182,7 @@ function App() {
       const interval = setInterval(checkDailyReminder, 60 * 60 * 1000);
       return () => clearInterval(interval);
     }
-  }, [habits, settings]);
+  }, [habits, settings.dailyReminders]);
 
   // Handlers
   const toggleHabit = async (habitId, dateKey) => {
@@ -1947,13 +2203,18 @@ function App() {
       h.id === habitId ? { ...h, logs: newLogs } : h
     ));
 
-    // Firestore update in background (no await to prevent UI blocking)
-    firestoreService.updateHabitLogsInFirestore(currentUser.uid, habitId, newLogs)
+    // Local store update in background (no await to prevent UI blocking)
+    dbService.updateHabitLogsInFirestore(null, habitId, newLogs)
       .catch(() => {
         // Rollback on error
         setHabits(habits);
         showToast('Error', 'Failed to update habit. Please try again.', 'error');
       });
+
+    const nowDone = !!newLogs[dateKey];
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate(nowDone ? 15 : 8);
+    }
 
     // Achievement checks (only when checking, not unchecking)
     if (newLogs[dateKey]) {
@@ -1970,90 +2231,47 @@ function App() {
       name,
       logs: {}
     };
-    await firestoreService.addHabitToFirestore(currentUser.uid, newHabit);
+    await dbService.addHabitToFirestore(null, newHabit);
   };
 
   // Save Journal Entry Handler
   const saveJournalEntry = async (date, data) => {
-    await firestoreService.saveJournalEntryInFirestore(currentUser.uid, date, data);
+    await dbService.saveJournalEntryInFirestore(null, date, data);
   };
-
-  // Account Modal Handlers
-  const handleAddEmail = () => {
-    if (newEmail.trim() && !additionalEmails.find(e => e.email === newEmail.trim())) {
-      setAdditionalEmails([...additionalEmails, { email: newEmail.trim(), verified: false }]);
-      setNewEmail('');
-      setIsAddingEmail(false);
-    }
-  };
-
-  const handleRemoveEmail = (email) => {
-    setAdditionalEmails(additionalEmails.filter(e => e.email !== email));
-  };
-
-  const handleCancelAddEmail = () => {
-    setNewEmail('');
-    setIsAddingEmail(false);
-  };
-
-
-
-
-  // Show loading spinner while checking authentication
-  if (authLoading) {
-    return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh',
-        backgroundColor: '#f8fafc'
-      }}>
-        <div style={{
-          textAlign: 'center'
-        }}>
-          <div className="spinner" style={{
-            width: '50px',
-            height: '50px',
-            border: '4px solid #e2e8f0',
-            borderTop: '4px solid #6366f1',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-            margin: '0 auto 1rem'
-          }}></div>
-          <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Loading...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <>
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route
-          path="/*"
-          element={
-            <ProtectedRoute>
-              <div className="app-container" style={{
-                backgroundImage: 'linear-gradient(rgba(255,255,255,0.9), rgba(55,48,163,0.1))',
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                backgroundRepeat: 'no-repeat',
-                minHeight: '100vh'
-              }}>
-                <nav className="navbar">
-                  <div className="navbar-inner">
-                    <div className="logo">
-                      <div className="logo-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                      </div>
-                      HabitTracker
-                    </div>
-                    <div className="nav-links">
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      <div className="app-container" style={{
+          backgroundImage: 'linear-gradient(rgba(255,255,255,0.9), rgba(55,48,163,0.1))',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          minHeight: '100vh'
+        }}>
+        <header className="mobile-topbar mobile-only">
+          <div className="mobile-topbar-inner">
+            <div className="logo">
+              <div className="logo-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </div>
+              HabitTracker
+            </div>
+          </div>
+        </header>
+        <nav className="navbar desktop-only">
+          <div className="navbar-inner">
+            <div className="logo">
+              <div className="logo-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </div>
+              HabitTracker
+            </div>
+            <div className="nav-links">
                       <NavLink to="/" className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}>
                         <svg className="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
@@ -2084,245 +2302,37 @@ function App() {
                         Settings
                       </NavLink>
                     </div>
-                    <div className="user-profile" ref={accountPopupRef}>
-                      <div
-                        className="user-profile-trigger"
-                        onClick={() => setIsAccountPopupOpen(!isAccountPopupOpen)}
-                        style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', position: 'relative' }}
-                      >
-                        <div style={{ textAlign: 'right', fontSize: '0.9rem' }}>
-                          <span style={{ color: '#64748b' }}>Welcome, </span>
-                          <span style={{ fontWeight: 600 }}>{currentUser?.displayName?.split(' ')?.[0] || 'User'}</span>
-                        </div>
-                        {currentUser?.photoURL ? (
-                          <img src={currentUser.photoURL} alt="avatar" className="user-avatar" referrerPolicy="no-referrer" />
-                        ) : (
-                          <div className="user-avatar" style={{ fontWeight: 600, color: '#64748b', fontSize: '1rem' }}>
-                            {currentUser?.displayName?.[0] || currentUser?.email?.[0] || 'U'}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Account Dropdown Popup */}
-                      {isAccountPopupOpen && (
-                        <div className="account-popup">
-                          <div className="account-popup-header">
-                            {currentUser?.photoURL ? (
-                              <img src={currentUser.photoURL} alt="avatar" className="account-popup-avatar" referrerPolicy="no-referrer" />
-                            ) : (
-                              <div className="account-popup-avatar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e2e8f0', fontWeight: 600, color: '#64748b' }}>
-                                {currentUser?.displayName?.[0] || currentUser?.email?.[0] || 'U'}
-                              </div>
-                            )}
-                            <div className="account-popup-info">
-                              <div className="account-popup-name">{currentUser?.displayName || 'User'}</div>
-                              <div className="account-popup-email">{currentUser?.email}</div>
-                            </div>
-                          </div>
-                          <div className="account-popup-divider"></div>
-                          <button
-                            className="account-popup-item"
-                            onClick={() => {
-                              setIsAccountPopupOpen(false);
-                              setIsAccountModalOpen(true);
-                            }}
-                          >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <circle cx="12" cy="12" r="3"></circle>
-                              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                            </svg>
-                            Manage account
-                          </button>
-                          <button
-                            className="account-popup-item"
-                            onClick={() => {
-                              setIsAccountPopupOpen(false);
-                              logout();
-                            }}
-                          >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                              <polyline points="16 17 21 12 16 7"></polyline>
-                              <line x1="21" y1="12" x2="9" y2="12"></line>
-                            </svg>
-                            Sign out
-                          </button>
-                        </div>
-                      )}
-                    </div>
                   </div>
                 </nav>
 
                 <main className="main-content">
                   <div className="content-wrapper">
-                    <AnimatePresence mode="wait">
-                      <Routes location={location} key={location.pathname}>
-                        <Route path="/" element={<HabitsPage habits={habits} onToggle={toggleHabit} onAdd={addHabit} />} />
-                        <Route path="/journal" element={<Journal journalEntries={journalEntries} />} />
-                        <Route
-                          path="/journal/:date"
-                          element={<JournalEntry journalEntries={journalEntries} onSave={saveJournalEntry} />}
-                        />
-                        <Route path="/analytics" element={<AnalyticsPage habits={habits} />} />
-                        <Route path="/settings" element={<Settings settings={settings} onSettingsChange={setSettings} habits={habits} />} />
-                        <Route path="*" element={<Navigate to="/" replace />} />
-                      </Routes>
-                    </AnimatePresence>
+                    {!booted ? (
+                      <BootSkeleton />
+                    ) : (
+                    <Routes>
+                      <Route path="/" element={<HabitsPage habits={habits} onToggle={toggleHabit} onAdd={addHabit} />} />
+                      <Route path="/journal" element={<Journal journalEntries={journalEntries} />} />
+                      <Route
+                        path="/journal/:date"
+                        element={<JournalEntry journalEntries={journalEntries} onSave={saveJournalEntry} />}
+                      />
+                      <Route path="/analytics" element={<AnalyticsPage habits={habits} />} />
+                      <Route path="/settings" element={<Settings settings={settings} onSettingsChange={setSettings} habits={habits} />} />
+                      <Route path="*" element={<Navigate to="/" replace />} />
+                    </Routes>
+                    )}
                   </div>
                 </main>
               </div>
-            </ProtectedRoute>
-          }
-        />
-      </Routes >
+      <MobileBottomNav />
 
-      {/* Account Settings Modal */}
-      {
-        isAccountModalOpen && (
-          <div className="modal-overlay" onClick={() => setIsAccountModalOpen(false)}>
-            <div className="account-modal" onClick={(e) => e.stopPropagation()}>
-
-              <div className="account-modal-content">
-                <button className="account-modal-close" onClick={() => setIsAccountModalOpen(false)}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                </button>
-
-                <div className="account-modal-header">
-                  <h3>Profile details</h3>
-                </div>
-
-                <div className="account-modal-section">
-                  <div className="account-modal-profile-header">
-                    <div className="account-modal-profile-avatar">
-                      {currentUser?.photoURL ? (
-                        <img src={currentUser.photoURL} alt="avatar" />
-                      ) : (
-                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e2e8f0', fontWeight: 600, color: '#64748b', fontSize: '1.5rem', borderRadius: '50%' }}>
-                          {currentUser?.displayName?.[0] || currentUser?.email?.[0] || 'U'}
-                        </div>
-                      )}
-                    </div>
-                    <div className="account-modal-profile-info">
-                      <h4>{currentUser?.displayName || 'User'}</h4>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="account-modal-section">
-                  <h4 className="account-modal-section-title">Email addresses</h4>
-
-                  {/* Primary Email */}
-                  <div className="account-modal-email-item">
-                    <div className="account-modal-email-info">
-                      <div className="account-modal-email-address">{currentUser?.email}</div>
-                      <span className="account-modal-badge">Primary</span>
-                    </div>
-                    <button className="account-modal-menu-btn">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="1"></circle>
-                        <circle cx="12" cy="5" r="1"></circle>
-                        <circle cx="12" cy="19" r="1"></circle>
-                      </svg>
-                    </button>
-                  </div>
-
-                  {/* Additional Emails */}
-                  {additionalEmails.map((emailObj, index) => (
-                    <div key={index} className="account-modal-email-item">
-                      <div className="account-modal-email-info">
-                        <div className="account-modal-email-address">{emailObj.email}</div>
-                        {!emailObj.verified && (
-                          <span className="account-modal-badge-unverified">Unverified</span>
-                        )}
-                      </div>
-                      <button
-                        className="account-modal-menu-btn"
-                        onClick={() => handleRemoveEmail(emailObj.email)}
-                        title="Remove email"
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <line x1="18" y1="6" x2="6" y2="18"></line>
-                          <line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
-
-                  {/* Add Email Form */}
-                  {isAddingEmail ? (
-                    <div className="account-modal-add-email-form">
-                      <input
-                        type="email"
-                        className="account-modal-email-input"
-                        placeholder="Enter email address"
-                        value={newEmail}
-                        onChange={(e) => setNewEmail(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && handleAddEmail()}
-                        autoFocus
-                      />
-                      <div className="account-modal-form-actions">
-                        <button
-                          className="account-modal-form-btn cancel"
-                          onClick={handleCancelAddEmail}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          className="account-modal-form-btn save"
-                          onClick={handleAddEmail}
-                        >
-                          Add
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      className="account-modal-add-btn"
-                      onClick={() => setIsAddingEmail(true)}
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="12" y1="5" x2="12" y2="19"></line>
-                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                      </svg>
-                      Add email address
-                    </button>
-                  )}
-                </div>
-
-                <div className="account-modal-section">
-                  <h4 className="account-modal-section-title">Connected accounts</h4>
-                  <div className="account-modal-connected-item">
-                    <div className="account-modal-connected-info">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                      </svg>
-                      <div>
-                        <div className="account-modal-connected-name">Google</div>
-                        <div className="account-modal-connected-email">{currentUser?.email}</div>
-                      </div>
-                    </div>
-                    <button className="account-modal-menu-btn">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="1"></circle>
-                        <circle cx="12" cy="5" r="1"></circle>
-                        <circle cx="12" cy="19" r="1"></circle>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )
-      }
     </>
   );
 }
 
 export default AppWrapper;
+
+
+
+

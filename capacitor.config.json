@@ -1,0 +1,15 @@
+{
+  "appId": "com.habittracker.app",
+  "appName": "HabitTracker",
+  "webDir": "dist",
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0,
+      "backgroundColor": "#4f46e5"
+    },
+    "StatusBar": {
+      "overlaysWebView": true,
+      "style": "LIGHT"
+    }
+  }
+}

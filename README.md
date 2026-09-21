@@ -1,341 +1,154 @@
-# ✨ Habit Tracker Pro
+<div align="center">
 
-A modern, minimal, and premium habit tracking application designed to help you build consistency and reflect on your growth. Built with **React 19**, **Vite**, and **Firebase**, this app features a sleek bento-grid layout, visual analytics, and a powerful daily journaling system.
+<img src="public/logo.svg" width="96" alt="HabitTracker logo" />
 
----
+# HabitTracker
 
-## 🚀 Features
+Offline-first habit tracking — one React codebase shipping as an installable web app and a native Android app.
 
-### 🎯 Habit Management
-- **Daily Tracking**: Create, edit, and track daily habits with a simple check-in system
-- **Monthly Calendar View**: Visual representation of your habit completion
-- **Streak Tracking**: Monitor your current and longest streaks
-- **Edit & Delete**: Manage your habits with an intuitive interface
-- **Overall Progress**: See completion rates and statistics at a glance
+[![Release](https://img.shields.io/github/actions/workflow/status/prathameshlonare/habit-tracker/android-release.yml?style=for-the-badge)](https://github.com/prathameshlonare/habit-tracker/actions)
+[![Latest release](https://img.shields.io/github/v/release/prathameshlonare/habit-tracker?style=for-the-badge)](https://github.com/prathameshlonare/habit-tracker/releases)
+[![Last commit](https://img.shields.io/github/last-commit/prathameshlonare/habit-tracker?style=for-the-badge)](https://github.com/prathameshlonare/habit-tracker/commits)
 
-### � Daily Journaling
-- **Integrated Journal**: Daily prompts with structured reflection sections
-- **Mood Tracking**: Track your daily mood with emoji selectors
-- **Reflection Prompts**: Gratitude, highlights, challenges, learning, and goals
-- **Calendar View**: Browse past entries with an intuitive calendar interface
-- **Entry Statistics**: View your journaling streaks and patterns
+</div>
 
-### � Visual Analytics
-- **Dynamic Charts**: View your progress through beautiful visualizations
-- **Monthly Trends**: Completion rates over the last 6 months (bar chart)
-- **90-Day Activity**: Daily activity line chart for the last 3 months
-- **Top Performers**: See which habits you're most consistent with
-- **Key Metrics**: Active habits, average rate, longest streak, and best month
+## Table of Contents
 
-### 🔒 Secure Authentication
-- **Google Login**: Seamless authentication with Google OAuth
-- **Email Whitelisting**: Private access control for authorized users only
-- **User Isolation**: Complete data privacy - each user sees only their own data
-- **Firestore Security**: User-specific read/write permissions
+- [What is this?](#what-is-this)
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Architecture](#architecture)
+- [Project Structure](#project-structure)
+- [Android Release](#android-release)
+- [Data Model](#data-model)
+- [License](#license)
 
-### 📄 Export to PDF
-- **Beautiful Reports**: Generate and download summary reports
-- **Habit Data**: Export all your habits and completion history
-- **Journal Entries**: Include your journal reflections in the export
+## What is this?
 
-### 📱 Fully Responsive
-- **Mobile-First Design**: Optimized for all screen sizes
-- **Touch-Friendly**: 44px minimum button sizes for easy tapping
-- **Bento Grid Layout**: Modern 2-column grid on mobile devices
-- **Premium UI**: Glassmorphism effects and smooth animations
+HabitTracker tracks daily habits, streaks, mood journaling, and progress analytics. It runs fully offline with no accounts: localStorage on web, SQLite on Android. The same Vite + React 19 build serves as a PWA and, via Capacitor 8, as the `com.habittracker.app` native package with background reminders, splash screen, and edge-to-edge Material 3 UI.
 
-### � Notifications
-- **Daily Reminders**: Browser notifications at 9 AM and 6 PM
-- **Achievement Alerts**: Celebrate streaks and milestones (3, 7, 14, 30 days)
-- **All Completed**: Special notification when you complete all habits
-- **Mobile-Friendly**: Works on Android and iOS with HTTPS
+Built as a personal daily driver, shaped by real on-device testing.
 
----
+## Features
 
-## 🛠️ Technology Stack
+- **Daily habits** — Today view, 7-day strip, per-habit streaks, bottom-sheet add/edit
+- **Journal** — daily mood + guided prompts (gratitude, highlights, challenges, learning, goals)
+- **Analytics** — completion trends, top performers, streak records
+- **Reminders** — 9 AM / 6 PM daily alarms and streak milestones; system notifications on Android, browser notifications on web
+- **PDF reports** — one-tap export, shared via the native share sheet on Android
+- **Native shell** — adaptive icon, indigo splash with manual hide, gesture-back handling, haptic ticks
 
-- **Frontend**: React.js 19, Vite
-- **Backend/Database**: Firebase Firestore
-- **Authentication**: Firebase Auth (Google)
-- **Routing**: React Router v6
-- **Charts**: Chart.js & React-Chartjs-2
-- **PDF Generation**: jsPDF & html2canvas
-- **Styling**: Vanilla CSS (Custom UI System)
-- **Icons**: Lucide React
-- **Hosting**: Firebase Hosting
+## Quick Start
 
----
+Requires Node 22+ and Java 21 (Android only).
 
-## � Project Structure
-
-```text
-habit-tracker/
-├── src/
-│   ├── assets/           # Static assets, images, and brand files
-│   ├── components/       # Reusable UI components
-│   │   ├── Login.jsx     # Login page component
-│   │   └── ProtectedRoute.jsx  # Route protection wrapper
-│   ├── contexts/         # React Context providers
-│   │   └── AuthContext.jsx     # Authentication state management
-│   ├── services/         # API and Database interaction logic
-│   │   └── firestoreService.js # Firestore CRUD operations
-│   ├── App.jsx           # Main application logic & Routing
-│   ├── App.css           # Global core styles & Design system
-│   ├── Settings.css      # Settings page styles
-│   ├── Toast.css         # Toast notification styles
-│   ├── Login.css         # Login page styles
-│   ├── firebase.js       # Firebase SDK initialization & Config
-│   ├── exportPDF.js      # PDF report generation logic
-│   └── main.jsx          # Application entry point
-├── public/               # Public assets (icons, manifest.json)
-├── firebase.json         # Firebase Hosting configuration
-├── .env                  # Environment variables (Secrets)
-└── README.md            # Project documentation
-```
-
----
-
-## ⚙️ Installation & Setup
-
-### 1. Clone the Repository
 ```bash
 git clone https://github.com/prathameshlonare/habit-tracker.git
 cd habit-tracker
+npm ci
 ```
 
-### 2. Install Dependencies
+Run on web:
+
 ```bash
-npm install
+npm run dev            # localhost
+npm run dev -- --host  # phone on the same Wi-Fi via LAN IP
 ```
 
-### 3. Setup Environment Variables
-Create a `.env` file in the root directory and add your Firebase credentials:
+Run on Android over USB (USB debugging on):
 
-```env
-VITE_FIREBASE_API_KEY=your_api_key
-VITE_FIREBASE_AUTH_DOMAIN=your_project_id.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=your_project_id
-VITE_FIREBASE_STORAGE_BUCKET=your_project_id.appspot.com
-VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-VITE_FIREBASE_APP_ID=your_app_id
-```
-
-### 4. Configure Allowed Emails
-Edit `src/firebase.js` and add authorized email addresses:
-
-```javascript
-export const ALLOWED_EMAILS = [
-  'your-email@gmail.com',
-  'friend-email@gmail.com'
-];
-```
-
-### 5. Run the Development Server
-```bash
-npm run dev
-```
-
-The app will be available at `http://localhost:5173`
-
-### 6. Build for Production
 ```bash
 npm run build
+npx cap sync android
+cd android && ./gradlew :app:assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
----
+Ship a signed release by pushing a tag — CI builds, signs, and attaches the APK + AAB to the GitHub Release:
 
-## � How to Get Firebase Credentials
-
-1. Go to the [Firebase Console](https://console.firebase.google.com/)
-2. Click **"Add Project"** and follow the setup steps
-3. Once the project is created, click the **Web icon (`</>`)** to register a new web app
-4. Copy the `firebaseConfig` values provided
-5. **Enable Required Services**:
-   - **Authentication**: Enable **Google** as a Sign-in provider
-   - **Firestore Database**: Create a database in **Production mode**
-6. Paste the values into your `.env` file as shown in the Setup section
-
----
-
-## 🔥 Firebase Firestore Structure
-
-```
-users/
-  {userId}/
-    habits/
-      {habitId}/
-        - id: string
-        - name: string
-        - logs: object { "YYYY-MM-DD": true }
-        - createdAt: timestamp
-        - updatedAt: timestamp
-    journal/
-      {date}/  # Format: YYYY-MM-DD
-        - mood: string
-        - gratitude: string
-        - highlights: string
-        - challenges: string
-        - learning: string
-        - goals: string
-        - notes: string
-        - updatedAt: timestamp
-```
-
----
-
-## 🛡️ Database Security Rules
-
-To protect your data and ensure user isolation, use these Firestore security rules:
-
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // Users can only access their own data
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null 
-                         && request.auth.uid == userId;
-    }
-  }
-}
-```
-
-**What this does:**
-- ✅ Users can ONLY read their own data
-- ✅ Users can ONLY write to their own data
-- ✅ No cross-user access possible
-- ✅ Enforced at database level
-
----
-
-## 🚀 Deployment (Firebase Hosting)
-
-### 1. Install Firebase CLI
 ```bash
-npm install -g firebase-tools
+git tag v1.0.0 && git push origin v1.0.0
 ```
 
-### 2. Login to Firebase
-```bash
-firebase login
+## Architecture
+
+```mermaid
+flowchart LR
+    UI[React screens] --> Repo[src/db/repo.js]
+    Repo -->|web| LS[(localStorage)]
+    Repo -->|native| SQL[(SQLite via Capacitor)]
+    UI --> Rem[src/services/reminders.js]
+    Rem -->|web| WN[Browser Notification]
+    Rem -->|native| LN[LocalNotifications alarms]
+    App[Capacitor shell] --> Splash[splash + status bar]
+    App --> Back[gesture back handler]
 ```
 
-### 3. Initialize Firebase Hosting
-```bash
-firebase init hosting
+Screens never touch storage directly — everything goes through `repo.js`, which keeps a sync in-memory API and flushes to SQLite on native. First native launch seeds SQLite from any existing local data.
+
+## Project Structure
+
+```
+habit-tracker/
+├── .github/
+│   └── workflows/
+│       └── android-release.yml
+├── public/
+│   ├── icons/
+│   ├── manifest.webmanifest
+│   ├── logo.svg
+│   └── sw.js
+├── resources/
+│   └── android-res/
+├── scripts/
+│   └── apply-android-custom.mjs
+├── src/
+│   ├── assets/
+│   │   └── fonts/
+│   ├── components/
+│   │   ├── JournalCalendar.jsx
+│   │   ├── MobileBottomNav.jsx
+│   │   └── MobileDailyView.jsx
+│   ├── db/
+│   │   ├── adapters/
+│   │   ├── repo.js
+│   │   └── schema.js
+│   ├── hooks/
+│   ├── services/
+│   │   ├── backHandler.js
+│   │   ├── dbService.js
+│   │   ├── exportPDF.js
+│   │   └── reminders.js
+│   ├── styles/
+│   ├── App.jsx
+│   └── main.jsx
+├── capacitor.config.json
+├── index.html
+├── package.json
+└── vite.config.js
 ```
 
-**Configuration:**
-- Public directory: `dist`
-- Single-page app: `Yes`
-- Automatic builds with GitHub: `No` (optional)
+`android/` is gitignored and regenerated (`npx cap add android` + `node scripts/apply-android-custom.mjs`, which re-applies icons, splash art, and manifest permissions from `resources/android-res/`).
 
-### 4. Build and Deploy
-```bash
-npm run build
-firebase deploy
-```
+## Android Release
 
-Your app will be live at: `https://your-project-id.web.app`
+- **App ID:** `com.habittracker.app` (permanent)
+- **Permissions:** `POST_NOTIFICATIONS`, `SCHEDULE_EXACT_ALARM` / `USE_EXACT_ALARM`, `RECEIVE_BOOT_COMPLETED`, `INTERNET`, `ACCESS_NETWORK_STATE`
+- **Signing:** release keystore lives off-repo; CI reads it from four secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`), `versionCode` from the run number, `versionName` from the tag
+- **Distribution:** signed APK on GitHub Releases today; Play internal-testing track later (sideloaded APKs still show the one-time unknown-source prompt — only Play removes that)
 
----
+## Data Model
 
-## 🎨 Design System
+SQLite schema v1 (`src/db/schema.js`): `habits` + `habit_logs` (per-day checks), `journal_entries` (one row per date), `settings` (key/value), `meta` (schema version). Web mirrors the same shape in localStorage keys.
 
-### Color Palette
-- **Primary**: `#4f46e5` (Indigo)
-- **Primary Hover**: `#4338ca`
-- **Background**: `#f8fafc` (Light Gray)
-- **Card Background**: `#ffffff` (White)
-- **Text Main**: `#1e293b` (Dark Slate)
-- **Text Muted**: `#64748b` (Slate)
-- **Border**: `#e2e8f0` (Light Border)
+## License
 
-### Typography
-- **Font Family**: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto
-- **Base Size**: 14px
-- **Headings**: 700 weight, -0.02em letter spacing
-
-### Components
-- **Border Radius**: 12px (cards), 8px (buttons)
-- **Shadows**: Subtle elevation with rgba(0, 0, 0, 0.1)
-- **Transitions**: 0.2s ease for smooth animations
-- **Min Touch Target**: 44px for mobile accessibility
+Personal project. All rights reserved.
 
 ---
 
-## 📱 Mobile Optimization
+<div align="center">
 
-- **Responsive Grid**: 2-column layout on mobile, expands on larger screens
-- **Horizontal Scroll**: Habit table scrolls horizontally on small screens
-- **Touch Gestures**: Optimized for swipe and tap interactions
-- **Viewport Meta**: Properly configured for mobile devices
-- **Performance**: Lazy loading and code splitting for fast load times
+Try the PWA, or grab the APK from [Releases](https://github.com/prathameshlonare/habit-tracker/releases) — and star the repo if daily streaks are your thing.
 
----
-
-## 🔔 Notification Features
-
-### Daily Reminders
-- Notifications at 9 AM and 6 PM (if enabled)
-- Only triggers if you haven't completed any habits
-
-### Achievement Notifications
-- **3-Day Streak**: "Keep up the great work!"
-- **7-Day Streak**: "One week strong!"
-- **14-Day Streak**: "Two weeks of consistency!"
-- **30-Day Streak**: "One month milestone!"
-- **All Completed**: Special celebration when you finish all habits
-
-**Note**: Notifications require HTTPS (works on deployed app, not localhost)
-
----
-
-## 🤝 Contributing
-
-This is a private project for personal use. If you have access and want to contribute:
-
-1. Create a feature branch: `git checkout -b feature/amazing-feature`
-2. Make your changes and test thoroughly
-3. Commit your changes: `git commit -m 'Add amazing feature'`
-4. Push to the branch: `git push origin feature/amazing-feature`
-5. Submit for review
-
----
-
-## � License
-
-This project is for personal use and backup. All rights reserved.
-
----
-
-## 👥 Author
-
-**Prathamesh Lonare**
-- GitHub: [@prathameshlonare](https://github.com/prathameshlonare)
-
----
-
-## 🙏 Acknowledgments
-
-- Firebase for backend infrastructure and authentication
-- Chart.js for beautiful data visualizations
-- React community for excellent documentation and ecosystem
-- Vite for lightning-fast development experience
-- All contributors and testers who helped improve this app
-
----
-
-## 📊 Project Stats
-
-- **React Version**: 19
-- **Build Tool**: Vite
-- **Bundle Size**: Optimized for production
-- **Browser Support**: Modern browsers (Chrome, Firefox, Safari, Edge)
-- **Mobile Support**: iOS Safari, Chrome Android
-
----
-
-**Built with ❤️ using React, Vite, and Firebase**
-
-*Track habits. Build consistency. Reflect on growth.* 🚀
+</div>

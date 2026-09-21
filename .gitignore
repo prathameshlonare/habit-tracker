@@ -32,7 +32,19 @@ dist-ssr
 .env.local
 .env.*.local
 .firebase
-
+key.txt
 # Agents
 .Agents
 skills-lock.json
+
+# Only the Vite app is tracked. Native platforms are regenerated
+# (`npx cap add android` + `node scripts/apply-android-custom.mjs`).
+android/
+ios/
+
+# Local-only: backend, data, planning docs
+server/
+data/
+docs/
+.omo/
+resources/
