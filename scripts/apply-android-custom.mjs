@@ -23,6 +23,11 @@ if (!existsSync(resDir)) {
 cpSync(join(root, 'resources', 'android-res'), resDir, { recursive: true });
 console.log('Overlay copied: resources/android-res -> res/');
 
+const gradleSrc = join(root, 'resources', 'android-app', 'build.gradle');
+const gradleDst = join(androidDir, 'app', 'build.gradle');
+cpSync(gradleSrc, gradleDst);
+console.log('build.gradle overlaid (signingConfigs + env versions).');
+
 let manifest = readFileSync(manifestPath, 'utf8');
 if (!manifest.includes('POST_NOTIFICATIONS')) {
   const anchor = '    <uses-permission android:name="android.permission.INTERNET" />';
