@@ -1,61 +1,72 @@
 <div align="center">
 
-<img src="public/logo.svg" width="96" alt="HabitTracker logo" />
+<a href="https://github.com/prathameshlonare/habit-tracker/releases">
+  <img src="public/banner.png" width="100%" alt="HabitTracker Banner" />
+</a>
 
 # HabitTracker
 
-Offline-first habit tracking — one React codebase shipping as an installable web app and a native Android app.
+<p align="center">
+  <b>One React 19 codebase shipping as an installable PWA and a native Android app with zero account lock-in.</b>
+</p>
 
-[![Release](https://img.shields.io/github/actions/workflow/status/prathameshlonare/habit-tracker/android-release.yml?style=for-the-badge)](https://github.com/prathameshlonare/habit-tracker/actions)
-[![Latest release](https://img.shields.io/github/v/release/prathameshlonare/habit-tracker?style=for-the-badge)](https://github.com/prathameshlonare/habit-tracker/releases)
-[![Last commit](https://img.shields.io/github/last-commit/prathameshlonare/habit-tracker?style=for-the-badge)](https://github.com/prathameshlonare/habit-tracker/commits)
+<a href="https://github.com/prathameshlonare/habit-tracker/actions"><img src="https://img.shields.io/github/actions/workflow/status/prathameshlonare/habit-tracker/android-release.yml?branch=main&style=flat-square&color=22c55e" alt="CI Status" /></a>
+<a href="https://github.com/prathameshlonare/habit-tracker/releases"><img src="https://img.shields.io/github/v/release/prathameshlonare/habit-tracker?style=flat-square&color=0ea5e9" alt="Latest Release" /></a>
+<a href="https://github.com/prathameshlonare/habit-tracker/commits"><img src="https://img.shields.io/github/last-commit/prathameshlonare/habit-tracker?style=flat-square&color=64748b" alt="Last Commit" /></a>
+<img src="https://img.shields.io/badge/platform-Web%20%7C%20Android-6366f1?style=flat-square" alt="Platform" />
+
+<p align="center">
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#key-features">Features</a> •
+  <a href="#architecture">Architecture</a> •
+  <a href="https://github.com/prathameshlonare/habit-tracker/releases">Download APK</a>
+</p>
 
 </div>
 
-## Table of Contents
+<br />
 
-- [What is this?](#what-is-this)
-- [Features](#features)
-- [Quick Start](#quick-start)
-- [Architecture](#architecture)
-- [Project Structure](#project-structure)
-- [Android Release](#android-release)
-- [Data Model](#data-model)
-- [License](#license)
+## Overview
 
-## What is this?
+HabitTracker tracks daily habits, completion streaks, mood journaling, and analytics without third-party tracking servers or mandatory user accounts.
 
-HabitTracker tracks daily habits, streaks, mood journaling, and progress analytics. It runs fully offline with no accounts: localStorage on web, SQLite on Android. The same Vite + React 19 build serves as a PWA and, via Capacitor 8, as the `com.habittracker.app` native package with background reminders, splash screen, and edge-to-edge Material 3 UI.
+Data remains strictly on-device: stored in `localStorage` inside web browsers, and persisted directly to an embedded `SQLite` database on Android. The single Vite + React 19 codebase compiles to a Progressive Web App and packages into the native `com.habittracker.app` bundle via Capacitor 8 with system alarms, splash screen, and edge-to-edge Material 3 UI.
 
-Built as a personal daily driver, shaped by real on-device testing.
+---
 
-## Features
+## Key Features
 
-- **Daily habits** — Today view, 7-day strip, per-habit streaks, bottom-sheet add/edit
-- **Journal** — daily mood + guided prompts (gratitude, highlights, challenges, learning, goals)
-- **Analytics** — completion trends, top performers, streak records
-- **Reminders** — 9 AM / 6 PM daily alarms and streak milestones; system notifications on Android, browser notifications on web
-- **PDF reports** — one-tap export, shared via the native share sheet on Android
-- **Native shell** — adaptive icon, indigo splash with manual hide, gesture-back handling, haptic ticks
+| Capability | Technical Implementation | Practical Benefit |
+| :--- | :--- | :--- |
+| **Offline-First Storage** | Unified `repo.js` routing to `localStorage` (Web) or `SQLite` (Android) | Zero accounts required. Instant startup with zero server roundtrips. |
+| **Habit & Streak Tracking** | 7-day completion strip, per-habit streaks, and bottom-sheet editor | Visual accountability with automated streak calculation. |
+| **Guided Mood Journal** | Structured prompts (gratitude, highlights, challenges, daily targets) | Daily reflection logging stored locally alongside habit logs. |
+| **Automated Alarms** | Exact alarms via `LocalNotifications` (Android) and Web Notifications API | Scheduled 9:00 AM and 6:00 PM check-in prompts without cloud services. |
+| **Analytics & PDF Export** | Client-side aggregation with native Android share sheet integration | One-tap printable performance reports via jsPDF. |
+| **Native Android Shell** | Capacitor 8 with gesture back-handling, haptic feedback, and adaptive icons | Native look and feel from a single frontend codebase. |
+
+---
 
 ## Quick Start
 
-Requires Node 22+ and Java 21 (Android only).
+### Prerequisites
+* **Node.js**: v22+
+* **Java**: JDK 21 (Required for Android builds)
+
+### 1. Web Development
 
 ```bash
 git clone https://github.com/prathameshlonare/habit-tracker.git
 cd habit-tracker
 npm ci
+npm run dev
 ```
 
-Run on web:
+> **Testing on Mobile (Same Wi-Fi)**: Run `npm run dev:lan` to access the development server from your phone's browser.
 
-```bash
-npm run dev            # localhost
-npm run dev -- --host  # phone on the same Wi-Fi via LAN IP
-```
+### 2. Android Build & USB Install
 
-Run on Android over USB (USB debugging on):
+Connect an Android device with USB Debugging enabled:
 
 ```bash
 npm run build
@@ -64,91 +75,85 @@ cd android && ./gradlew :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Ship a signed release by pushing a tag — CI builds, signs, and attaches the APK + AAB to the GitHub Release:
-
-```bash
-git tag v1.0.0 && git push origin v1.0.0
-```
+---
 
 ## Architecture
 
+Data flow is completely decoupled from UI components. Screens interact solely through `src/db/repo.js`:
+
+<p align="center">
+  <img src="public/architecture.png" width="100%" alt="HabitTracker Architecture Diagram" />
+</p>
+
+<details>
+<summary><b>View Raw Mermaid Flowchart</b></summary>
+
 ```mermaid
 flowchart LR
-    UI[React screens] --> Repo[src/db/repo.js]
-    Repo -->|web| LS[(localStorage)]
-    Repo -->|native| SQL[(SQLite via Capacitor)]
+    UI[React 19 Screens] --> Repo[src/db/repo.js]
+    Repo -->|Web| LS[(localStorage)]
+    Repo -->|Native| SQL[(SQLite via Capacitor)]
     UI --> Rem[src/services/reminders.js]
-    Rem -->|web| WN[Browser Notification]
-    Rem -->|native| LN[LocalNotifications alarms]
-    App[Capacitor shell] --> Splash[splash + status bar]
-    App --> Back[gesture back handler]
+    Rem -->|Web| WN[Browser Notification API]
+    Rem -->|Native| LN[LocalNotifications Alarms]
+    App[Capacitor Shell] --> Splash[Material 3 Splash & Status Bar]
+    App --> Back[Gesture Back Handler]
 ```
 
-Screens never touch storage directly — everything goes through `repo.js`, which keeps a sync in-memory API and flushes to SQLite on native. First native launch seeds SQLite from any existing local data.
+</details>
 
-## Project Structure
+---
 
+## Deep Dive & Configuration
+
+<details>
+<summary><b>🚀 Android Release Pipeline & Keystore</b></summary>
+
+Signed production APKs and AABs are generated automatically by GitHub Actions upon pushing a release tag:
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
 ```
+
+* **Package ID**: `com.habittracker.app`
+* **Permissions**: `POST_NOTIFICATIONS`, `SCHEDULE_EXACT_ALARM`, `RECEIVE_BOOT_COMPLETED`, `INTERNET`
+* **CI Secrets**: Keystore signing runs off-repo using `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`.
+
+</details>
+
+<details>
+<summary><b>📂 Repository Structure</b></summary>
+
+```text
 habit-tracker/
-├── .github/
-│   └── workflows/
-│       └── android-release.yml
-├── public/
-│   ├── icons/
-│   ├── manifest.webmanifest
-│   ├── logo.svg
-│   └── sw.js
-├── resources/
-│   └── android-res/
-├── scripts/
-│   └── apply-android-custom.mjs
+├── .github/workflows/       # GitHub Actions Android release pipeline
+├── public/                  # PWA manifest, service worker, and web icons
+├── resources/android-res/   # Android overlay assets (splash, mipmap icons)
+├── scripts/                 # Post-sync Capacitor asset overlay scripts
 ├── src/
-│   ├── assets/
-│   │   └── fonts/
-│   ├── components/
-│   │   ├── JournalCalendar.jsx
-│   │   ├── MobileBottomNav.jsx
-│   │   └── MobileDailyView.jsx
-│   ├── db/
-│   │   ├── adapters/
-│   │   ├── repo.js
-│   │   └── schema.js
-│   ├── hooks/
-│   ├── services/
-│   │   ├── backHandler.js
-│   │   ├── dbService.js
-│   │   ├── exportPDF.js
-│   │   └── reminders.js
-│   ├── styles/
-│   ├── App.jsx
-│   └── main.jsx
-├── capacitor.config.json
-├── index.html
-├── package.json
+│   ├── components/          # Calendar, Bottom Nav, Daily Habit views
+│   ├── db/                  # SQLite schema & unified storage repository
+│   └── services/            # Reminders, PDF export, back-handler
+├── capacitor.config.json    # Native bridge configuration
 └── vite.config.js
 ```
 
-`android/` is gitignored and regenerated (`npx cap add android` + `node scripts/apply-android-custom.mjs`, which re-applies icons, splash art, and manifest permissions from `resources/android-res/`).
+</details>
 
-## Android Release
+<details>
+<summary><b>🗄️ Database Schema</b></summary>
 
-- **App ID:** `com.habittracker.app` (permanent)
-- **Permissions:** `POST_NOTIFICATIONS`, `SCHEDULE_EXACT_ALARM` / `USE_EXACT_ALARM`, `RECEIVE_BOOT_COMPLETED`, `INTERNET`, `ACCESS_NETWORK_STATE`
-- **Signing:** release keystore lives off-repo; CI reads it from four secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`), `versionCode` from the run number, `versionName` from the tag
-- **Distribution:** signed APK on GitHub Releases today; Play internal-testing track later (sideloaded APKs still show the one-time unknown-source prompt — only Play removes that)
+SQLite Schema v1 (`src/db/schema.js`):
+* `habits`: Definitions, color codes, targets.
+* `habit_logs`: Timestamped completion checks.
+* `journal_entries`: One entry per date (mood score + prompt answers).
+* `settings`: Key/value configuration.
 
-## Data Model
+</details>
 
-SQLite schema v1 (`src/db/schema.js`): `habits` + `habit_logs` (per-day checks), `journal_entries` (one row per date), `settings` (key/value), `meta` (schema version). Web mirrors the same shape in localStorage keys.
+---
 
 ## License
 
 Personal project. All rights reserved.
-
----
-
-<div align="center">
-
-Try the PWA, or grab the APK from [Releases](https://github.com/prathameshlonare/habit-tracker/releases) — and star the repo if daily streaks are your thing.
-
-</div>
